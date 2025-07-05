@@ -6,7 +6,9 @@ using UnityEngine;
 
 namespace BingoMode
 {
+    using System.Runtime.CompilerServices;
     using BingoHUD;
+    using Rewired.ControllerExtensions;
 
     public static class SpectatorHooks
     {
@@ -17,7 +19,7 @@ namespace BingoMode
             On.SoundLoader.ShouldSoundPlay += SoundLoader_ShouldSoundPlay;
             On.Player.checkInput += Player_checkInput;
             On.RainCycle.Update += RainCycle_Update;
-            IL.WorldLoader.ctor_RainWorldGame_Name_bool_string_Region_SetupValues += WorldLoader_ctor_RainWorldGame_Name_bool_string_Region_SetupValues;
+            IL.WorldLoader.ctor_RainWorldGame_Name_Timeline_bool_string_Region_SetupValues += WorldLoader_ctor_RainWorldGame_Name_Timeline_bool_string_Region_SetupValues;
             On.Player.Die += Player_Die;
         }
 
@@ -32,11 +34,11 @@ namespace BingoMode
             On.SoundLoader.ShouldSoundPlay -= SoundLoader_ShouldSoundPlay;
             On.Player.checkInput -= Player_checkInput;
             On.RainCycle.Update -= RainCycle_Update;
-            IL.WorldLoader.ctor_RainWorldGame_Name_bool_string_Region_SetupValues -= WorldLoader_ctor_RainWorldGame_Name_bool_string_Region_SetupValues;
+            IL.WorldLoader.ctor_RainWorldGame_Name_Timeline_bool_string_Region_SetupValues -= WorldLoader_ctor_RainWorldGame_Name_Timeline_bool_string_Region_SetupValues;
             On.Player.Die -= Player_Die;
         }
 
-        private static void WorldLoader_ctor_RainWorldGame_Name_bool_string_Region_SetupValues(ILContext il)
+        private static void WorldLoader_ctor_RainWorldGame_Name_Timeline_bool_string_Region_SetupValues(ILContext il)
         {
             ILCursor c = new(il);
 
@@ -87,12 +89,7 @@ namespace BingoMode
         private static void HUD_InitSinglePlayerHud(On.HUD.HUD.orig_InitSinglePlayerHud orig, HUD.HUD self, RoomCamera cam)
         {
             orig.Invoke(self, cam);
-            
-            for (int i = 0; i < cam.SpriteLayers.Length - 2; i++)
-            {
-                cam.SpriteLayers[i].RemoveAllChildren();
-                cam.SpriteLayers[i].RemoveFromContainer();
-            }
+
             if (cam.preLoadedTexture != null)
             {
                 cam.preLoadedTexture = new byte[0];
@@ -116,6 +113,33 @@ namespace BingoMode
             {
                 cam.virtualMicrophone.ambientSoundPlayers[j].Destroy();
             }
+            cam.room.AddObject(new BlackScreen());
+        }
+
+    }
+
+    public class BlackScreen : UpdatableAndDeletable, IDrawable
+    {
+        public void InitiateSprites(RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam)
+        {
+            sLeaser.sprites = new FSprite[1];
+            sLeaser.sprites[0] = new FSprite("Futile_White", true);
+            sLeaser.sprites[0].scaleX = (rCam.room.RoomRect.right - rCam.room.RoomRect.left) / 8f;
+            sLeaser.sprites[0].scaleY = (rCam.room.RoomRect.top - rCam.room.RoomRect.bottom) / 8f;
+            sLeaser.sprites[0].x = rCam.room.RoomRect.Center.x;
+            sLeaser.sprites[0].y = rCam.room.RoomRect.Center.y;
+            sLeaser.sprites[0].alpha = 1f;
+            this.AddToContainer(sLeaser, rCam, null);
+        }
+        public void DrawSprites(RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, float timeStacker, Vector2 camPos)
+        {
+        }
+        public void ApplyPalette(RoomCamera.SpriteLeaser sLeaser, RoomCamera cam, RoomPalette pal) => sLeaser.sprites[0].color = UnityEngine.Color.black;
+        public void AddToContainer(RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, FContainer newContatiner)
+        {
+            newContatiner = rCam.ReturnFContainer("Bloom");
+            sLeaser.sprites[0].RemoveFromContainer();
+            newContatiner.AddChild(sLeaser.sprites[0]);
         }
     }
 }

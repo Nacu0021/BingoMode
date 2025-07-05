@@ -5,7 +5,9 @@ using System.Collections.Generic;
 
 namespace BingoMode.BingoChallenges
 {
+    using System.Linq;
     using BingoMenu;
+    using IL.Watcher;
 
     public abstract class BingoChallenge : Challenge
     {
@@ -72,11 +74,13 @@ namespace BingoMode.BingoChallenges
                 if (RequireSave() && !revealed)
                 {
                     revealed = true;
+                    Plugin.logger.LogInfo("Singleplayer, challenge completed but not locked in: " + this.ToString());
                     
                     ChallengeAlmostComplete?.Invoke(SteamTest.team);
                     return;
                 }
 
+                Plugin.logger.LogInfo("Singleplayer, challenge locked in: " + this.ToString());
                 OnChallengeCompleted(SteamTest.team);
 
                 //if (ExpeditionGame.activeUnlocks.Contains("unl-passage"))
@@ -98,11 +102,13 @@ namespace BingoMode.BingoChallenges
                 if (RequireSave() && !revealed)
                 {
                     revealed = true;
-                    
+                    Plugin.logger.LogInfo("Multiplayer HOST, challenge completed but not locked in: " + this.ToString());
+
                     ChallengeAlmostComplete?.Invoke(SteamTest.team);
                     return;
                 }
 
+                Plugin.logger.LogInfo("Multiplayer HOST, challenge locked in: " + this.ToString());
                 OnChallengeCompleted(SteamTest.team);
 
                 //if (ExpeditionGame.activeUnlocks.Contains("unl-passage"))
@@ -120,11 +126,13 @@ namespace BingoMode.BingoChallenges
                 if (RequireSave() && !revealed)
                 {
                     revealed = true;
-                    
+                    Plugin.logger.LogInfo("Multiplayer PLAYER, challenge completed but not locked in: " + this.ToString());
+
                     ChallengeAlmostComplete?.Invoke(SteamTest.team);
                     return;
                 }
 
+                Plugin.logger.LogInfo("Multiplayer PLAYER, challenge locked in: " + this.ToString());
                 SteamFinal.ChallengeStateChangeToHost(this, false);
                 return;
             }
@@ -193,7 +201,14 @@ namespace BingoMode.BingoChallenges
                     }
                 }
             }
-            if (team == SteamTest.team && this is BingoUnlockChallenge uch && BingoData.challengeTokens.Contains(uch.unlock.Value)) BingoData.challengeTokens.Remove(uch.unlock.Value);
+            if (team == SteamTest.team && this is BingoUnlockChallenge uch && BingoData.challengeTokens.Contains(uch.unlock.Value))
+            {
+                BingoData.challengeTokens.Remove(uch.unlock.Value);
+            }
+            if (team == SteamTest.team && this is BingoBroadcastChallenge brd && BingoData.challengeTokens.Contains(brd.chatlog.Value))
+            {
+                BingoData.challengeTokens.Remove(brd.chatlog.Value);
+            }
 
             BingoSaveFile.Save();
         }
@@ -253,7 +268,15 @@ namespace BingoMode.BingoChallenges
             bool lastCompleted = TeamsCompleted[team];
             TeamsCompleted[team] = false;
             if (team == SteamTest.team) completed = false;
-            if (this is BingoUnlockChallenge uch && !BingoData.challengeTokens.Contains(uch.unlock.Value)) BingoData.challengeTokens.Add(uch.unlock.Value);
+            if (team == SteamTest.team && this is BingoUnlockChallenge uch && !BingoData.challengeTokens.Contains(uch.unlock.Value))
+            {
+                BingoData.challengeTokens.Add(uch.unlock.Value);
+            }
+            if (team == SteamTest.team && this is BingoBroadcastChallenge brd && !BingoData.challengeTokens.Contains(brd.chatlog.Value))
+            {
+                BingoData.challengeTokens.Add(brd.chatlog.Value);
+            }
+
             if (hidden && team != SteamTest.team) hidden = false;
             if (lastCompleted)
             {

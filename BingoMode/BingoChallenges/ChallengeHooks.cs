@@ -1429,34 +1429,67 @@ namespace BingoMode.BingoChallenges
             return orig.Invoke(self, safariToken);
         }
 
+        public static bool MiscProgressionData_GetBroadcastListened(On.PlayerProgression.MiscProgressionData.orig_GetBroadcastListened orig, PlayerProgression.MiscProgressionData self, ChatlogData.ChatlogID chatlog)
+        {
+            if (BingoData.challengeTokens.Contains(chatlog.value)) return false;
+            return orig.Invoke(self, chatlog);
+        }
+
         public static void CollectToken_Pop(On.CollectToken.orig_Pop orig, CollectToken self, Player player)
         {
             if (self.expand > 0f)
             {
                 return;
             }
-            if (self.placedObj.data is CollectToken.CollectTokenData d && BingoData.challengeTokens.Contains(d.tokenString + (d.isRed ? "-safari" : "")) && ExpeditionData.challengeList.Any(x => x is BingoUnlockChallenge b && b.unlock.Value == d.tokenString + (d.isRed ? "-safari" : "")))
+
+            if (self.placedObj.data is CollectToken.CollectTokenData d)
             {
-                foreach (Challenge ch in ExpeditionData.challengeList)
+                string tokenId = d.tokenString + (d.isRed ? "-safari" : "");
+
+                if (BingoData.challengeTokens.Contains(tokenId) &&
+                    ExpeditionData.challengeList.Any(x =>
+                        (x is BingoUnlockChallenge b1 && b1.unlock.Value == tokenId) ||
+                            (x is BingoBroadcastChallenge b2 && b2.chatlog.Value == tokenId)))
                 {
-                    if (ch is BingoUnlockChallenge b && !b.completed && !b.TeamsCompleted[SteamTest.team] && !b.revealed && !b.hidden && b.unlock.Value == (d.tokenString + (d.isRed ? "-safari" : "")))
+                    foreach (Challenge ch in ExpeditionData.challengeList)
                     {
-                        ch.CompleteChallenge();
+                        if (ch is BingoUnlockChallenge b &&
+                            !b.completed &&
+                            !b.TeamsCompleted[SteamTest.team] &&
+                            !b.revealed &&
+                            !b.hidden &&
+                            b.unlock.Value == tokenId)
+                        {
+                            ch.CompleteChallenge();
+                        }
+                        else if (ch is BingoBroadcastChallenge br &&
+                                 !br.completed &&
+                                 !br.TeamsCompleted[SteamTest.team] &&
+                                 !br.revealed &&
+                                 !br.hidden &&
+                                 br.chatlog.Value == tokenId)
+                        {
+                            ch.CompleteChallenge();
+                        }
                     }
-                }
+                    self.expandAroundPlayer = player;
+                    self.expand = 0.01f;
+                    self.room.PlaySound(SoundID.Token_Collect, self.pos);
 
-                self.expandAroundPlayer = player;
-                self.expand = 0.01f;
-                self.room.PlaySound(SoundID.Token_Collect, self.pos);
+                    for (int i = 0; i < 10; i++)
+                    {
+                        self.room.AddObject(new CollectToken.TokenSpark(
+                            self.pos + Custom.RNV() * 2f,
+                            Custom.RNV() * 11f * UnityEngine.Random.value + Custom.DirVec(player.mainBodyChunk.pos, self.pos) * 5f * UnityEngine.Random.value,
+                            self.GoldCol(self.glitch),
+                            self.underWaterMode));
+                    }
 
-                int num = 0;
-                while ((float)num < 10f)
-                {
-                    self.room.AddObject(new CollectToken.TokenSpark(self.pos + Custom.RNV() * 2f, Custom.RNV() * 11f * UnityEngine.Random.value + Custom.DirVec(player.mainBodyChunk.pos, self.pos) * 5f * UnityEngine.Random.value, self.GoldCol(self.glitch), self.underWaterMode));
-                    num++;
+                    return;
                 }
             }
-            else orig.Invoke(self, player);
+
+            orig.Invoke(self, player);
         }
 
         public delegate Color orig_TokenColor(CollectToken self);
@@ -1478,7 +1511,7 @@ namespace BingoMode.BingoChallenges
             ILCursor c = new(il);
             if (c.TryGotoNext(
                 x => x.MatchLdfld("PlacedObject", "active")
-                ) && 
+                ) &&
                 c.TryGotoNext(MoveType.After,
                 x => x.MatchLdsfld("ModManager", "Expedition")
                 ))
@@ -1623,6 +1656,80 @@ namespace BingoMode.BingoChallenges
                 if (ExpeditionData.challengeList[j] is BingoKarmaFlowerChallenge c)
                 {
                     c.Karmad();
+                }
+            }
+        }
+
+        public static void Player_SlugcatGrabCloak(On.Player.orig_SlugcatGrab orig, Player self, PhysicalObject obj, int graspUsed)
+        {
+            orig.Invoke(self, obj, graspUsed);
+
+            if (obj.abstractPhysicalObject.type == MSCItemType.MoonCloak && self.room.abstractRoom.name.ToLowerInvariant() == "ms_farside")
+            {
+                for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+                {
+                    if (ExpeditionData.challengeList[j] is BingoMoonCloakChallenge c && !c.deliver.Value)
+                    {
+                        c.Cloak();
+                    }
+                }
+            }
+        }
+
+        //For debugging moonCloak and Timeline, make sure to uncomment the BingoMoonCloak hooks so its used
+        public static void SaveState_ctorCloak(On.SaveState.orig_ctor orig, SaveState self, SlugcatStats.Name saveStateNumber, PlayerProgression progression)
+        {
+            Plugin.logger.LogInfo("Original Cloak timeline position: " + progression.miscProgressionData.cloakTimelinePosition);
+            progression.miscProgressionData.cloakTimelinePosition = null;
+
+            orig.Invoke(self, saveStateNumber, progression);
+
+            self.miscWorldSaveData.moonGivenRobe = false;
+
+            Plugin.logger.LogInfo("Modified Cloak timeline position: " + progression.miscProgressionData.cloakTimelinePosition);
+            Plugin.logger.LogInfo("Cloak after invoke! " + self.miscWorldSaveData.moonGivenRobe);
+        }
+
+        public static void Room_LoadedMoonCloak(ILContext il)
+        {
+            ILCursor b = new(il);
+            if (b.TryGotoNext(
+                x => x.MatchLdsfld("Expedition.ExpeditionData", "startingDen")
+                ) &&
+                b.TryGotoNext(MoveType.After,
+                x => x.MatchCallOrCallvirt<WorldCoordinate>(".ctor")
+                ))
+            {
+                b.Emit(OpCodes.Ldarg_0);
+                b.Emit(OpCodes.Ldloc, 140);
+                b.EmitDelegate<Action<Room, WorldCoordinate>>((room, pos) =>
+                {
+                    AbstractWorldEntity existingFucker = room.abstractRoom.entities.FirstOrDefault(x => x is AbstractPhysicalObject o && o.type == MSCItemType.MoonCloak);
+                    if (existingFucker != null)
+                    {
+                        room.abstractRoom.RemoveEntity(existingFucker);
+                    }
+
+                    AbstractPhysicalObject startItem = new AbstractConsumable(room.world, MSCItemType.MoonCloak, null, new WorldCoordinate(room.abstractRoom.index, room.shelterDoor.playerSpawnPos.x, room.shelterDoor.playerSpawnPos.y, 0), room.game.GetNewID(), -1, -1, null);
+                    room.abstractRoom.entities.Add(startItem);
+                    startItem.Realize();
+                });
+            }
+            else Plugin.logger.LogError("Room_MoonCloak IL FAILURE " + il);
+        }
+
+        public static void SLOracleBehavior_GrabCloak(On.SLOracleBehaviorHasMark.MoonConversation.orig_AddEvents orig, SLOracleBehaviorHasMark.MoonConversation self)
+        {
+            orig.Invoke(self);
+
+            if (self.describeItem == MoreSlugcatsEnums.MiscItemType.MoonCloak)
+            {
+                for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+                {
+                    if (ExpeditionData.challengeList[j] is BingoMoonCloakChallenge c && c.deliver.Value)
+                    {
+                        c.Delivered();
+                    }
                 }
             }
         }
