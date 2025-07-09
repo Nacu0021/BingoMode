@@ -1,4 +1,4 @@
-﻿using BingoMode.BingoSteamworks;
+using BingoMode.BingoSteamworks;
 using Expedition;
 using Menu.Remix;
 using MoreSlugcats;
@@ -22,7 +22,8 @@ namespace BingoMode.BingoChallenges
 
         public override void UpdateDescription()
         {
-            this.description = ChallengeTools.IGT.Translate("Store [<current>/<amount>] <target_item> in <shelter_type> shelter")
+            this.description = ChallengeTools.IGT.Translate("<action> [<current>/<amount>] <target_item> in <shelter_type> shelter")
+                .Replace("<action>", anyShelter.value ? "Bring" : "Store")
                 .Replace("<current>", ValueConverter.ConvertToString(current))
                 .Replace("<amount>", ValueConverter.ConvertToString<int>(this.amount.Value))
                 .Replace("<target_item>", ChallengeTools.ItemName(new(target.Value)))
