@@ -1,27 +1,51 @@
-﻿using BingoMode.BingoSteamworks;
+﻿using BingoMode.BingoRandomizer;
+using BingoMode.BingoSteamworks;
 using Expedition;
 using RWCustom;
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
 namespace BingoMode.BingoChallenges
 {
     using static ChallengeHooks;
+
+    public class BingoDodgeLeviathanRandomizer : ChallengeRandomizer
+    {
+        public override Challenge Random()
+        {
+            BingoDodgeLeviathanChallenge challenge = new();
+            return challenge;
+        }
+
+        public override StringBuilder Serialize(string indent)
+        {
+            string surindent = indent + INDENT_INCREMENT;
+            StringBuilder serializedContent = new();
+            return base.Serialize(indent).Replace("__Type__", "DodgeLeviathan").Replace("__Content__", serializedContent.ToString());
+        }
+
+        public override void Deserialize(string serialized)
+        {
+            Dictionary<string, string> dict = ToDict(serialized);
+        }
+    }
+
     public class BingoDodgeLeviathanChallenge : BingoChallenge
     {
         //public int wasInArea;
 
         public override void UpdateDescription()
         {
-            this.description = ChallengeTools.IGT.Translate("Dodge a leviathan's bite");
+            this.description = ChallengeTools.IGT.Translate("Dodge a Leviathan's bite");
             base.UpdateDescription();
         }
 
         public override Phrase ConstructPhrase()
         {
-            return new Phrase([new Icon("leviathan_dodge", 1f, Color.white)], []);
+            return new Phrase([[new Icon("leviathan_dodge")]]);
         }
 
         public override bool Duplicable(Challenge challenge)
@@ -31,7 +55,7 @@ namespace BingoMode.BingoChallenges
 
         public override string ChallengeName()
         {
-            return ChallengeTools.IGT.Translate("Dodging a leviathan");
+            return ChallengeTools.IGT.Translate("Dodging a Leviathan");
         }
 
         public override Challenge Generate()

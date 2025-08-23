@@ -1,30 +1,67 @@
-﻿using BingoMode.BingoSteamworks;
+﻿using BingoMode.BingoRandomizer;
+using BingoMode.BingoSteamworks;
 using Expedition;
 using MoreSlugcats;
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
 namespace BingoMode.BingoChallenges
 {
     using static ChallengeHooks;
+
+    public class BingoPearlDeliveryRandomizer : ChallengeRandomizer
+    {
+        public Randomizer<string> region;
+
+        public override Challenge Random()
+        {
+            BingoPearlDeliveryChallenge challenge = new();
+            challenge.region.Value = region.Random();
+            return challenge;
+        }
+
+        public override StringBuilder Serialize(string indent)
+        {
+            string surindent = indent + INDENT_INCREMENT;
+            StringBuilder serializedContent = new();
+            serializedContent.AppendLine($"{surindent}region-{region.Serialize(surindent)}");
+            return base.Serialize(indent).Replace("__Type__", "PearlDelivery").Replace("__Content__", serializedContent.ToString());
+        }
+
+        public override void Deserialize(string serialized)
+        {
+            Dictionary<string, string> dict = ToDict(serialized);
+            region = Randomizer<string>.InitDeserialize(dict["region"]);
+        }
+    }
+
     public class BingoPearlDeliveryChallenge : BingoChallenge
     {
         public SettingBox<string> region;
         public int iterator = -1;
 
+        public BingoPearlDeliveryChallenge()
+        {
+            region = new("", "Pearl from Region", 0, listName: "regions");
+        }
+
         public override void UpdateDescription()
         {
             region.Value = region.Value.Substring(0, 2);
             string newValue = (ModManager.MSC && ExpeditionData.slugcatPlayer == MoreSlugcatsEnums.SlugcatStatsName.Artificer) ? ChallengeTools.IGT.Translate("Five Pebbles") : ChallengeTools.IGT.Translate("Looks To The Moon");
-            this.description = ChallengeTools.IGT.Translate("<region> colored pearl delivered to <iterator>").Replace("<region>", ChallengeTools.IGT.Translate(Region.GetRegionFullName(region.Value, ExpeditionData.slugcatPlayer))).Replace("<iterator>", newValue);
+            this.description = ChallengeTools.IGT.Translate("Deliver the <region> colored pearl to <iterator>").Replace("<region>", ChallengeTools.IGT.Translate(Region.GetRegionFullName(region.Value, ExpeditionData.slugcatPlayer))).Replace("<iterator>", newValue);
             base.UpdateDescription();
         }
 
         public override Phrase ConstructPhrase()
         {
-            return new Phrase([new Verse(region.Value), new Icon("Symbol_Pearl", 1f, new Color(0.7f, 0.7f, 0.7f)), new Icon("singlearrow", 1f, Color.white, 90f), new Icon(ExpeditionData.slugcatPlayer == MoreSlugcatsEnums.SlugcatStatsName.Artificer ? "nomscpebble" : "GuidanceMoon", 1f, ExpeditionData.slugcatPlayer == MoreSlugcatsEnums.SlugcatStatsName.Artificer ? new Color(0.44705883f, 0.9019608f, 0.76862746f) : new Color(1f, 0.8f, 0.3f))], [2,3]);
+            return new Phrase(
+                [[new Verse(region.Value), Icon.DATA_PEARL],
+                [new Icon("singlearrow", 1f, Color.white, 90f)],
+                [ExpeditionData.slugcatPlayer == MoreSlugcatsEnums.SlugcatStatsName.Artificer ? Icon.PEBBLES : Icon.MOON]]);
         }
 
         public override void Update()
@@ -71,7 +108,7 @@ namespace BingoMode.BingoChallenges
 
         public override string ChallengeName()
         {
-            return ChallengeTools.IGT.Translate("Delivering colored pearls to an iterator");
+            return ChallengeTools.IGT.Translate("Delivering colored pearls");
         }
 
         public override int Points()

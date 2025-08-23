@@ -1,4 +1,5 @@
-﻿using BingoMode.BingoSteamworks;
+﻿using BingoMode.BingoRandomizer;
+using BingoMode.BingoSteamworks;
 using Expedition;
 using Menu.Remix;
 using MoreSlugcats;
@@ -6,33 +7,96 @@ using RWCustom;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
+
 
 namespace BingoMode.BingoChallenges
 {
     using static ChallengeHooks;
+
+    public class BingoItemHoardRandomizer : ChallengeRandomizer
+    {
+        public Randomizer<string> target;
+        public Randomizer<int> amount;
+        public Randomizer<bool> anyShelter;
+        public Randomizer<string> region;
+
+        public override Challenge Random()
+        {
+            BingoItemHoardChallenge challenge = new();
+            challenge.target.Value = target.Random();
+            challenge.amount.Value = amount.Random();
+            challenge.anyShelter.Value = anyShelter.Random();
+            challenge.region.Value = region.Random();
+            return challenge;
+        }
+
+        public override StringBuilder Serialize(string indent)
+        {
+            string surindent = indent + INDENT_INCREMENT;
+            StringBuilder serializedContent = new();
+            serializedContent.AppendLine($"{surindent}target-{target.Serialize(surindent)}");
+            serializedContent.AppendLine($"{surindent}amount-{amount.Serialize(surindent)}");
+            serializedContent.AppendLine($"{surindent}anyShelter-{anyShelter.Serialize(surindent)}");
+            serializedContent.AppendLine($"{surindent}region-{region.Serialize(surindent)}");
+            return base.Serialize(indent).Replace("__Type__", "ItemHoard").Replace("__Content__", serializedContent.ToString());
+        }
+
+        public override void Deserialize(string serialized)
+        {
+            Dictionary<string, string> dict = ToDict(serialized);
+            target = Randomizer<string>.InitDeserialize(dict["target"]);
+            amount = Randomizer<int>.InitDeserialize(dict["amount"]);
+            anyShelter = Randomizer<bool>.InitDeserialize(dict["anyShelter"]);
+            region = Randomizer<string>.InitDeserialize(dict["region"]);
+        }
+    }
+
     public class BingoItemHoardChallenge : BingoChallenge
     {
         public int current;
         public SettingBox<string> target;
         public SettingBox<int> amount;
         public SettingBox<bool> anyShelter;
-        public List<string> stored = [];
+        public SettingBox<string> region;
+        public List<string> collected = [];
+
+        public BingoItemHoardChallenge()
+        {
+            amount = new(0, "Amount", 0);
+            target = new("", "Item", 1, listName: "expobject");
+            anyShelter = new(false, "Any Shelter", 2);
+            region = new("", "Region", 3, listName: "regions");
+        }
 
         public override void UpdateDescription()
         {
-            this.description = ChallengeTools.IGT.Translate("Store [<current>/<amount>] <target_item> in <shelter_type> shelter")
+            string location = region.Value != "Any Region" ? Region.GetRegionFullName(region.Value, ExpeditionData.slugcatPlayer) : "";
+            this.description = ChallengeTools.IGT.Translate("<action> [<current>/<amount>] <target_item> <shelter_type> shelter <location>")
+                .Replace("<action>", anyShelter.Value ? "Bring" : "Hoard")
                 .Replace("<current>", ValueConverter.ConvertToString(current))
                 .Replace("<amount>", ValueConverter.ConvertToString<int>(this.amount.Value))
                 .Replace("<target_item>", ChallengeTools.ItemName(new(target.Value)))
-                .Replace("<shelter_type>", anyShelter.Value ? "any" : "the same");
+                .Replace("<shelter_type>", anyShelter.Value ? "to any" : "in the same")
+                .Replace("<location>", location != "" ? "in " + location : "");
             base.UpdateDescription();
         }
 
         public override Phrase ConstructPhrase()
         {
-            return new Phrase([anyShelter.Value ? new Icon("doubleshelter", 1f, Color.white) : new Icon("ShelterMarker", 1f, Color.white), new Icon(ChallengeUtils.ItemOrCreatureIconName(target.Value), 1f, ChallengeUtils.ItemOrCreatureIconColor(target.Value)), new Counter(current, amount.Value)], [2]);
+            Phrase phrase = anyShelter.Value ?
+                new Phrase([[Icon.FromEntityName(target.Value), new Icon("singlearrow"), new Icon("doubleshelter")]]):
+                new Phrase([[new Icon("ShelterMarker"), Icon.FromEntityName(target.Value)]]);
+            int lastLine = 1;
+            if (region.Value != "Any Region")
+            {
+                phrase.InsertWord(new Verse(region.Value), 1);
+                lastLine = 2;
+            }
+            phrase.InsertWord(new Counter(current, amount.Value), lastLine);
+            return phrase;
         }
 
         public override bool Duplicable(Challenge challenge)
@@ -45,7 +109,7 @@ namespace BingoMode.BingoChallenges
 
         public override string ChallengeName()
         {
-            return ChallengeTools.IGT.Translate("Hoarding items in shelters");
+            return ChallengeTools.IGT.Translate("Putting items in shelters");
         }
 
         public override bool ValidForThisSlugcat(SlugcatStats.Name slugcat)
@@ -55,12 +119,21 @@ namespace BingoMode.BingoChallenges
 
         public override Challenge Generate()
         {
-            string[] liste = ChallengeUtils.GetSortedCorrectListForChallenge("expobject");
+            List<string> liste = [.. ChallengeUtils.GetSortedCorrectListForChallenge("expobject")];
+            if (ModManager.MSC && ExpeditionData.slugcatPlayer == MoreSlugcatsEnums.SlugcatStatsName.Artificer || ExpeditionData.slugcatPlayer == MoreSlugcatsEnums.SlugcatStatsName.Spear)
+            {
+                liste.Remove("BubbleGrass");
+            }
+            if (ModManager.MSC && ExpeditionData.slugcatPlayer == MoreSlugcatsEnums.SlugcatStatsName.Saint)
+            {
+                liste.Remove("LillyPuck");
+            }
             return new BingoItemHoardChallenge
             {
                 amount = new((int)Mathf.Lerp(2f, 8f, UnityEngine.Random.value), "Amount", 0),
-                target = new(liste[UnityEngine.Random.Range(0, liste.Length)], "Item", 1, listName: "expobject"),
-                anyShelter = new(UnityEngine.Random.value < 0.5f, "Any Shelter", 2)
+                target = new(liste[UnityEngine.Random.Range(0, liste.Count)], "Item", 1, listName: "expobject"),
+                anyShelter = new(UnityEngine.Random.value < 0.5f, "Any Shelter", 2),
+                region = new("Any Region", "Region", 4, listName: "regions"),
             };
         }
 
@@ -82,7 +155,7 @@ namespace BingoMode.BingoChallenges
         public override void Update()
         {
             base.Update();
-            if (completed || revealed || TeamsCompleted[SteamTest.team] || hidden || Custom.rainWorld.processManager.upcomingProcess != null) return;
+            if (completed || revealed || TeamsCompleted[SteamTest.team] || hidden || Custom.rainWorld.processManager.upcomingProcess != null)  return;
             for (int i = 0; i < this.game.Players.Count; i++)
             {
                 if (this.game.Players[i] != null && this.game.Players[i].realizedCreature != null && this.game.Players[i].realizedCreature.room != null && this.game.Players[i].Room.shelter)
@@ -92,38 +165,56 @@ namespace BingoMode.BingoChallenges
                     {
                         if (this.game.Players[i].realizedCreature.room.updateList[j] is PhysicalObject p && p.abstractPhysicalObject.type.value == target.Value)
                         {
-                            if (anyShelter.Value)
+                            if (!ItemInLocation(p.abstractPhysicalObject))
                             {
-                                
-                                string id = p.abstractPhysicalObject.ID.ToString();
-                                Plugin.logger.LogInfo("ID: " + id);
-                                if (!stored.Contains(id))
-                                {
-                                    stored.Add(id);
-                                    current++;
-                                    UpdateDescription();
-                                    if (current >= amount.Value)
-                                    {
-                                        this.CompleteChallenge();
-                                        return;
-                                    }
-                                    else ChangeValue();
-                                }
+                                return;
                             }
                             else
                             {
-                                count++;
-                                if (count >= amount.Value)
+                                if (anyShelter.Value)
                                 {
-                                    current = count;
-                                    this.CompleteChallenge();
-                                    return;
+                                    string id = p.abstractPhysicalObject.ID.ToString();
+                                    if (!collected.Contains(id))
+                                    {
+                                        collected.Add(id);
+                                        current++;
+                                        UpdateDescription();
+                                        if (current >= amount.Value)
+                                        {
+                                            this.CompleteChallenge();
+                                            return;
+                                        }
+                                        else ChangeValue();
+                                    }
+                                }
+                                else
+                                {
+                                    count++;
+                                    UpdateDescription();
+                                    if (count >= amount.Value)
+                                    {
+                                        current = count;
+                                        this.CompleteChallenge();
+                                        return;
+                                    }
                                 }
                             }
                         }
                     }
                 }
+
             }
+        }
+
+        public bool ItemInLocation(AbstractPhysicalObject apo)
+        {
+            string location = region.Value != "Any Region" ? region.Value : "boowomp";
+            AbstractRoom room = apo.Room;
+            if (location.ToLowerInvariant() == region.Value.ToLowerInvariant())
+            {
+                return room.world.region.name.ToLowerInvariant() == location.ToLowerInvariant();
+            }
+            else return true;
         }
 
         public override void Reset()
@@ -146,11 +237,13 @@ namespace BingoMode.BingoChallenges
                 "><",
                 target.ToString(),
                 "><",
+                region.ToString(),
+                "><",
                 completed ? "1" : "0",
                 "><",
                 revealed ? "1" : "0",
                 "><",
-                string.Join("cLtD", stored)
+                string.Join("cLtD", collected)
             });
         }
 
@@ -159,7 +252,20 @@ namespace BingoMode.BingoChallenges
             try
             {
                 string[] array = Regex.Split(args, "><");
-                if (array.Length == 7)
+                if (array.Length == 8)
+                {
+                    anyShelter = SettingBoxFromString(array[0]) as SettingBox<bool>;
+                    current = int.Parse(array[1], NumberStyles.Any, CultureInfo.InvariantCulture);
+                    amount = SettingBoxFromString(array[2]) as SettingBox<int>;
+                    target = SettingBoxFromString(array[3]) as SettingBox<string>;
+                    region = SettingBoxFromString(array[4]) as SettingBox<string>;
+                    completed = (array[5] == "1");
+                    revealed = (array[6] == "1");
+                    string[] arr = Regex.Split(array[7], "cLtD");
+                    collected = [.. arr];
+                }
+                // Legacy board hoard challenge compatibility
+                else if (array.Length == 7)
                 {
                     anyShelter = SettingBoxFromString(array[0]) as SettingBox<bool>;
                     current = int.Parse(array[1], NumberStyles.Any, CultureInfo.InvariantCulture);
@@ -168,7 +274,8 @@ namespace BingoMode.BingoChallenges
                     completed = (array[4] == "1");
                     revealed = (array[5] == "1");
                     string[] arr = Regex.Split(array[6], "cLtD");
-                    stored = [.. arr];
+                    region = SettingBoxFromString("System.String|Any Region|Region|3|regions") as SettingBox<string>;
+                    collected = [.. arr];
                 }
                 else if (array.Length == 4)
                 {
@@ -178,7 +285,8 @@ namespace BingoMode.BingoChallenges
                     revealed = (array[3] == "1");
                     anyShelter = SettingBoxFromString("System.Boolean|false|Any Shelter|2|NULL") as SettingBox<bool>;
                     current = 0;
-                    stored = [];
+                    collected = [];
+                    region = SettingBoxFromString("System.String|Any Region|Region|3|regions") as SettingBox<string>;
                 }
                 UpdateDescription();
             }
@@ -197,7 +305,7 @@ namespace BingoMode.BingoChallenges
         {
         }
 
-        public override List<object> Settings() => [target, amount, anyShelter];
+        public override List<object> Settings() => [target, amount, anyShelter, region];
 
     }
 }

@@ -1,18 +1,57 @@
-﻿using BingoMode.BingoSteamworks;
+﻿using BingoMode.BingoRandomizer;
+using BingoMode.BingoSteamworks;
 using Expedition;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
 namespace BingoMode.BingoChallenges
 {
     using static ChallengeHooks;
+
+    public class BingoEnterRegionFromRandomizer : ChallengeRandomizer
+    {
+        public Randomizer<string> from;
+        public Randomizer<string> to;
+
+        public override Challenge Random()
+        {
+            BingoEnterRegionFromChallenge challenge = new();
+            challenge.from.Value = from.Random();
+            challenge.to.Value = to.Random();
+            return challenge;
+        }
+
+        public override StringBuilder Serialize(string indent)
+        {
+            string surindent = indent + INDENT_INCREMENT;
+            StringBuilder serializedContent = new();
+            serializedContent.AppendLine($"{surindent}from-{from.Serialize(surindent)}");
+            serializedContent.AppendLine($"{surindent}to-{to.Serialize(surindent)}");
+            return base.Serialize(indent).Replace("__Type__", "EnterRegionFrom").Replace("__Content__", serializedContent.ToString());
+        }
+
+        public override void Deserialize(string serialized)
+        {
+            Dictionary<string, string> dict = ToDict(serialized);
+            from = Randomizer<string>.InitDeserialize(dict["from"]);
+            to = Randomizer<string>.InitDeserialize(dict["to"]);
+        }
+    }
+
     public class BingoEnterRegionFromChallenge : BingoChallenge
     {
         public SettingBox<string> from;
         public SettingBox<string> to;
+
+        public BingoEnterRegionFromChallenge()
+        {
+            from = new("", "From", 0, listName: "regionsreal");
+            to = new("", "To", 0, listName: "regionsreal");
+        }
 
         public override void UpdateDescription()
         {
@@ -24,7 +63,11 @@ namespace BingoMode.BingoChallenges
 
         public override Phrase ConstructPhrase()
         {
-            return new Phrase([new Verse(from.Value), new Icon("keyShiftA", 1f, new Color(66f / 255f, 135f / 255f, 1f), 180f), new Verse(to.Value)], [1,2]);
+            //return new Phrase(
+            //    [[new Verse(from.Value)],
+            //    [new Icon("keyShiftA", 1f, new Color(66f / 255f, 135f / 255f, 1f), 180f)],
+            //    [new Verse(to.Value)]]);
+            return new Phrase([[new Verse(from.Value), new Icon("keyShiftA", 1f, new Color(66f / 255f, 135f / 255f, 1f), 90f), new Verse(to.Value)]]);
         }
 
         public override bool Duplicable(Challenge challenge)
@@ -80,21 +123,18 @@ namespace BingoMode.BingoChallenges
             return ch;
         }
 
-        public void Gated(string gateName, string newWorld)
+        public void Gate(string fromWorld, string toWorld)
         {
             if (completed || TeamsCompleted[SteamTest.team] || hidden || revealed || TeamsFailed[SteamTest.team]) return;
 
-            gateName = FixSlugSpecificRegions(gateName);
-            List<string> worlds = gateName.Split('_').ToList();
-            worlds.RemoveAt(0);
-            //
-            //if ((worlds[0] != from.Value || worlds[1] != from.Value) && (worlds[0] != to.Value || worlds[1] != to.Value)) return;
-            // 
-            string prevWorld = worlds[worlds.IndexOf(newWorld) == 0 ? 1 : 0];
-            //
+            fromWorld = FixSlugSpecificRegions(fromWorld).ToUpperInvariant();
+            toWorld = FixSlugSpecificRegions(toWorld).ToUpperInvariant();
 
-            bool prevCheck = prevWorld == from.Value.ToUpperInvariant();
-            bool newCheck = newWorld == to.Value.ToUpperInvariant();
+            string fromValue = from.Value.ToUpperInvariant();
+            string toValue = to.Value.ToUpperInvariant();
+
+            bool prevCheck = fromWorld == from.Value.ToUpperInvariant();
+            bool newCheck = toWorld == to.Value.ToUpperInvariant();
 
             if (prevCheck && newCheck)
             {
@@ -159,12 +199,12 @@ namespace BingoMode.BingoChallenges
 
         public override void AddHooks()
         {
-            On.RegionGate.NewWorldLoaded_Room += RegionGate_NewWorldLoaded3;
+            On.WorldLoader.ctor_RainWorldGame_Name_Timeline_bool_string_Region_SetupValues += WorldLoader_EnterRegionFrom;
         }
 
         public override void RemoveHooks()
         {
-            On.RegionGate.NewWorldLoaded_Room -= RegionGate_NewWorldLoaded3;
+            On.WorldLoader.ctor_RainWorldGame_Name_Timeline_bool_string_Region_SetupValues -= WorldLoader_EnterRegionFrom;
         }
 
         public override List<object> Settings() => [from, to];

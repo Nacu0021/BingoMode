@@ -294,16 +294,34 @@ namespace BingoMode.BingoChallenges
             self.miscWorldSaveData.halcyonStolen = true;
         }
 
-        public static void CLOracleBehavior_Update(On.MoreSlugcats.CLOracleBehavior.orig_Update orig, CLOracleBehavior self, bool eu)
+        public static void CLOracleBehavior_Update_Iterator(On.MoreSlugcats.CLOracleBehavior.orig_Update orig, CLOracleBehavior self, bool eu)
         {
             orig.Invoke(self, eu);
 
-            if (!self.FocusedOnHalcyon) return;
-            for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+            if (self.hasNoticedPlayer)
             {
-                if (ExpeditionData.challengeList[j] is BingoSaintDeliveryChallenge c)
+                for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
                 {
-                    c.Delivered();
+                    if (ExpeditionData.challengeList[j] is BingoIteratorChallenge c && !c.moon.Value)
+                    {
+                        c.MeetPebbles();
+                    }
+                }
+            }
+        }
+
+        public static void CLOracleBehavior_Update_SaintDelivery(On.MoreSlugcats.CLOracleBehavior.orig_Update orig, CLOracleBehavior self, bool eu)
+        {
+            orig.Invoke(self, eu);
+
+            if (self.FocusedOnHalcyon)
+            {
+                for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+                {
+                    if (ExpeditionData.challengeList[j] is BingoSaintDeliveryChallenge c)
+                    {
+                        c.Delivered();
+                    }
                 }
             }
         }
@@ -586,6 +604,7 @@ namespace BingoMode.BingoChallenges
             }
         }
 
+        // false allows a flower to spawn
         public static void Room_LoadedKarmaFlower(ILContext il)
         {
             ILCursor c = new(il);
@@ -596,8 +615,8 @@ namespace BingoMode.BingoChallenges
             {
                 c.EmitDelegate<Func<bool, bool>>((orig) =>
                 {
-                    if (ExpeditionData.challengeList.Any(x => x is BingoKarmaFlowerChallenge c && (c.TeamsCompleted[SteamTest.team] || c.completed))) return orig;
-                    else return false;
+                    //if (ExpeditionData.challengeList.Any(x => x is BingoKarmaFlowerChallenge c && (c.TeamsCompleted[SteamTest.team] || c.completed))) return orig;
+                    return false;
                 });
             }
             else Plugin.logger.LogError("Room_LoadedKarmaFlower FAILURE " + il);
@@ -884,45 +903,6 @@ namespace BingoMode.BingoChallenges
             }
         }
 
-        public static void RegionGate_NewWorldLoaded3(On.RegionGate.orig_NewWorldLoaded_Room orig, RegionGate self, Room newRoom)
-        {
-            orig.Invoke(self, newRoom);
-        
-            for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
-            {
-                if (ExpeditionData.challengeList[j] is BingoEnterRegionFromChallenge c)
-                {
-                    c.Gated(self.room.abstractRoom.name.ToUpperInvariant(), self.room.world.region.name.ToUpperInvariant());
-                }
-            }
-        }
-
-        public static void RegionGate_NewWorldLoaded2(On.RegionGate.orig_NewWorldLoaded_Room orig, RegionGate self, Room newRoom)
-        {
-            orig.Invoke(self, newRoom);
-
-            for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
-            {
-                if (ExpeditionData.challengeList[j] is BingoTransportChallenge c)
-                {
-                    c.Gated(self.room.world.region.name);
-                }
-            }
-        }
-
-        public static void RegionGate_NewWorldLoaded1(On.RegionGate.orig_NewWorldLoaded_Room orig, RegionGate self, Room newRoom)
-        {
-            orig.Invoke(self, newRoom);
-
-            for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
-            {
-                if (ExpeditionData.challengeList[j] is BingoCreatureGateChallenge c)
-                {
-                    c.Gate(self.room.abstractRoom.name);
-                }
-            }
-        }
-
         public static bool LillyPuck_HitSomething(On.MoreSlugcats.LillyPuck.orig_HitSomething orig, LillyPuck self, SharedPhysics.CollisionResult result, bool eu)
         {
             if (BingoData.BingoMode && self.thrownBy is Player && result.obj is Creature victim && !victim.dead)
@@ -1020,19 +1000,6 @@ namespace BingoMode.BingoChallenges
             }
         }
 
-        //public static void BigEel_JawsSnap(On.BigEel.orig_JawsSnap orig, BigEel self)
-        //{
-        //    orig.Invoke(self);
-        //
-        //    for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
-        //    {
-        //        if (!self.clampedObjects.Any(x => x.chunk.owner is Player) && ExpeditionData.challengeList[j] is BingoDodgeLeviathanChallenge c && c.wasInArea > 0)
-        //        {
-        //            c.Dodged();
-        //        }
-        //    }
-        //}
-
         public static void FriendTracker_Update(On.FriendTracker.orig_Update orig, FriendTracker self)
         {
             orig.Invoke(self);
@@ -1064,39 +1031,91 @@ namespace BingoMode.BingoChallenges
             }
         }
 
-        public static void WorldLoaderNoRegion1(On.WorldLoader.orig_ctor_RainWorldGame_Name_Timeline_bool_string_Region_SetupValues orig, WorldLoader self, RainWorldGame game, SlugcatStats.Name playerCharacter, SlugcatStats.Timeline timelinePosition , bool singleRoomWorld, string worldName, Region region, RainWorldGame.SetupValues setupValues)
+        // worldName is being loaded, game.world.region.name is currently loaded. null check to prevent progress check on goals when loading first region
+        public static void WorldLoader_EnterRegionFrom(On.WorldLoader.orig_ctor_RainWorldGame_Name_Timeline_bool_string_Region_SetupValues orig, WorldLoader self, RainWorldGame game, SlugcatStats.Name playerCharacter, SlugcatStats.Timeline timelinePosition, bool singleRoomWorld, string worldName, Region region, RainWorldGame.SetupValues setupValues)
         {
             orig.Invoke(self, game, playerCharacter, timelinePosition, singleRoomWorld, worldName, region, setupValues);
-
-            for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+            if (game != null && game.world != null)
             {
-                if (ExpeditionData.challengeList[j] is BingoNoRegionChallenge c)
+                for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
                 {
-                    c.Entered(worldName);
+                    if (ExpeditionData.challengeList[j] is BingoEnterRegionFromChallenge EnterRegionFrom)
+                    {
+                        EnterRegionFrom.Gate(game.world.region.name, worldName);
+                    }
                 }
             }
         }
 
-        public static void WorldLoaderNoRegion2(On.WorldLoader.orig_ctor_RainWorldGame_Name_Timeline_bool_string_Region_SetupValues orig, WorldLoader self, RainWorldGame game, SlugcatStats.Name playerCharacter, SlugcatStats.Timeline timelinePosition, bool singleRoomWorld, string worldName, Region region, RainWorldGame.SetupValues setupValues)
+        public static void WorldLoader_Transport(On.WorldLoader.orig_ctor_RainWorldGame_Name_Timeline_bool_string_Region_SetupValues orig, WorldLoader self, RainWorldGame game, SlugcatStats.Name playerCharacter, SlugcatStats.Timeline timelinePosition, bool singleRoomWorld, string worldName, Region region, RainWorldGame.SetupValues setupValues)
         {
             orig.Invoke(self, game, playerCharacter, timelinePosition, singleRoomWorld, worldName, region, setupValues);
-            for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+            if (game != null && game.world != null)
             {
-                if (ExpeditionData.challengeList[j] is BingoAllRegionsExcept r)
+                for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
                 {
-                    r.Entered(worldName);
+                    if (ExpeditionData.challengeList[j] is BingoTransportChallenge transport)
+                    {
+                        transport.Gate(worldName);
+                    }
                 }
             }
         }
 
-        public static void WorldLoaderYesRegion1(On.WorldLoader.orig_ctor_RainWorldGame_Name_Timeline_bool_string_Region_SetupValues orig, WorldLoader self, RainWorldGame game, SlugcatStats.Name playerCharacter, SlugcatStats.Timeline timelinePosition, bool singleRoomWorld, string worldName, Region region, RainWorldGame.SetupValues setupValues)
+        public static void WorldLoader_CreatureGate(On.WorldLoader.orig_ctor_RainWorldGame_Name_Timeline_bool_string_Region_SetupValues orig, WorldLoader self, RainWorldGame game, SlugcatStats.Name playerCharacter, SlugcatStats.Timeline timelinePosition, bool singleRoomWorld, string worldName, Region region, RainWorldGame.SetupValues setupValues)
         {
             orig.Invoke(self, game, playerCharacter, timelinePosition, singleRoomWorld, worldName, region, setupValues);
+            if (game != null && game.world != null)
+            {
+                for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+                {
+                    if (ExpeditionData.challengeList[j] is BingoCreatureGateChallenge creatureGate)
+                    {
+                        creatureGate.Gate(worldName);
+                    }
+                }
+            }
+        }
+
+        public static void WorldLoader_EnterRegion(On.WorldLoader.orig_ctor_RainWorldGame_Name_Timeline_bool_string_Region_SetupValues orig, WorldLoader self, RainWorldGame game, SlugcatStats.Name playerCharacter, SlugcatStats.Timeline timelinePosition, bool singleRoomWorld, string worldName, Region region, RainWorldGame.SetupValues setupValues)
+        {
+            orig.Invoke(self, game, playerCharacter, timelinePosition, singleRoomWorld, worldName, region, setupValues);
+            if (game != null && game.world != null)
+            {
+                for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+                {
+                    if (ExpeditionData.challengeList[j] is BingoEnterRegionChallenge enterRegion)
+                    {
+                        enterRegion.Entered(worldName);
+                    }
+                }
+            }
+        }
+
+        public static void WorldLoader_AllRegionsExcept(On.WorldLoader.orig_ctor_RainWorldGame_Name_Timeline_bool_string_Region_SetupValues orig, WorldLoader self, RainWorldGame game, SlugcatStats.Name playerCharacter, SlugcatStats.Timeline timelinePosition, bool singleRoomWorld, string worldName, Region region, RainWorldGame.SetupValues setupValues)
+        {
+            orig.Invoke(self, game, playerCharacter, timelinePosition, singleRoomWorld, worldName, region, setupValues);
+            // This one doesn't check if the game or world is null because I want to count the starting region (popular demand as well)
             for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
             {
-                if (ExpeditionData.challengeList[j] is BingoEnterRegionChallenge r)
+                if (ExpeditionData.challengeList[j] is BingoAllRegionsExcept allExcept)
                 {
-                    r.Entered(worldName);
+                    allExcept.Entered(worldName);
+                }
+            }
+        }
+
+        public static void WorldLoader_NoRegion(On.WorldLoader.orig_ctor_RainWorldGame_Name_Timeline_bool_string_Region_SetupValues orig, WorldLoader self, RainWorldGame game, SlugcatStats.Name playerCharacter, SlugcatStats.Timeline timelinePosition, bool singleRoomWorld, string worldName, Region region, RainWorldGame.SetupValues setupValues)
+        {
+            orig.Invoke(self, game, playerCharacter, timelinePosition, singleRoomWorld, worldName, region, setupValues);
+            if (game != null && game.world != null)
+            {
+                for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+                {
+                    if (ExpeditionData.challengeList[j] is BingoNoRegionChallenge noRegion)
+                    {
+                        noRegion.Entered(worldName);
+                    }
                 }
             }
         }
@@ -1500,6 +1519,7 @@ namespace BingoMode.BingoChallenges
         }
 
         public delegate bool orig_PlaceKarmaFlower(Player self);
+        // false prevents a death flower from spawning
         public static bool Player_PlaceKarmaFlower_get(orig_PlaceKarmaFlower orig, Player self)
         {
             if (ExpeditionData.challengeList.Any(x => x is BingoKarmaFlowerChallenge c && (c.TeamsCompleted[SteamTest.team] || c.completed))) return orig.Invoke(self);
@@ -1608,15 +1628,16 @@ namespace BingoMode.BingoChallenges
 
         public static void Player_ObjectEaten(On.Player.orig_ObjectEaten orig, Player self, IPlayerEdible edible)
         {
-            orig.Invoke(self, edible);
 
             for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
             {
                 if (ExpeditionData.challengeList[j] is BingoEatChallenge c)
                 {
-                    c.FoodEated(edible);
+                    c.FoodEated(edible, self);
                 }
             }
+            // Invoke after so player malnourishment is correct
+            orig.Invoke(self, edible);
         }
 
         public static void Player_ObjectEatenSeed(On.Player.orig_ObjectEaten orig, Player self, IPlayerEdible edible)
@@ -1679,15 +1700,12 @@ namespace BingoMode.BingoChallenges
         //For debugging moonCloak and Timeline, make sure to uncomment the BingoMoonCloak hooks so its used
         public static void SaveState_ctorCloak(On.SaveState.orig_ctor orig, SaveState self, SlugcatStats.Name saveStateNumber, PlayerProgression progression)
         {
-            Plugin.logger.LogInfo("Original Cloak timeline position: " + progression.miscProgressionData.cloakTimelinePosition);
             progression.miscProgressionData.cloakTimelinePosition = null;
 
             orig.Invoke(self, saveStateNumber, progression);
 
             self.miscWorldSaveData.moonGivenRobe = false;
 
-            Plugin.logger.LogInfo("Modified Cloak timeline position: " + progression.miscProgressionData.cloakTimelinePosition);
-            Plugin.logger.LogInfo("Cloak after invoke! " + self.miscWorldSaveData.moonGivenRobe);
         }
 
         public static void Room_LoadedMoonCloak(ILContext il)
@@ -1729,6 +1747,122 @@ namespace BingoMode.BingoChallenges
                     if (ExpeditionData.challengeList[j] is BingoMoonCloakChallenge c && c.deliver.Value)
                     {
                         c.Delivered();
+                    }
+                }
+            }
+        }
+
+        public static void Player_SlugslamIL(ILContext il)
+        {
+            ILCursor c = new(il);
+
+            if (c.TryGotoNext(MoveType.After,
+                        x => x.MatchLdcI4(9),
+                        x => x.MatchLdloca(out _),
+                        x => x.MatchCall(typeof(float).GetMethod("ToString", Type.EmptyTypes)),
+                        x => x.MatchStelemRef(),
+                        x => x.MatchCall(typeof(RWCustom.Custom).GetMethod("Log", new[] { typeof(string[]) }))
+                ))
+            {
+                c.Emit(OpCodes.Ldloc, 7);
+                c.Emit(OpCodes.Ldarg, 1);
+                c.EmitDelegate<Action<float, PhysicalObject>>((num, crit) =>
+                {
+                    if (num > 0.25f)
+                    {
+                        for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+                        {
+                            if (ExpeditionData.challengeList[j] is BingoGourmandCrushChallenge c)
+                            {
+                                c.Crush((crit as Creature).abstractCreature.ID);
+                            }
+                        }
+                    }
+                });
+            }
+            else Plugin.logger.LogError("Player_SlugslamIL FAILURE " + il);
+        }
+
+        public static void SSOracleBehavior_SeePlayer(On.SSOracleBehavior.orig_SeePlayer orig, SSOracleBehavior self)
+        {
+            orig.Invoke(self);
+
+            for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+            {
+                if (ExpeditionData.challengeList[j] is BingoIteratorChallenge c)
+                {
+                    // These fucking rw devs man
+                    if (self.oracle.ID == MoreSlugcatsEnums.OracleID.DM)
+                    {
+                        c.MeetMoon();
+                    }
+                    else
+                    {
+                        c.MeetPebbles();
+                    }
+                }
+            }
+        }
+
+        public static void RMOracleBehavior_Update(On.MoreSlugcats.SSOracleRotBehavior.orig_Update orig, SSOracleRotBehavior self, bool eu)
+        {
+            orig.Invoke(self, eu);
+
+            if (self.hasNoticedPlayer)
+            {
+                for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+                {
+                    if (ExpeditionData.challengeList[j] is BingoIteratorChallenge c && !c.moon.Value)
+                    {
+                        c.MeetPebbles();
+                    }
+                }
+            }
+        }
+
+        public static void SLOracleBehaviorHasMark_InitateConversation(On.SLOracleBehaviorHasMark.orig_InitateConversation orig, SLOracleBehaviorHasMark self)
+        {
+            orig.Invoke(self);
+
+            for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+            {
+                if (ExpeditionData.challengeList[j] is BingoIteratorChallenge c && c.moon.Value)
+                {
+                    c.MeetMoon();
+                }
+            }
+        }
+
+        public static void BigNeedleWorm_Swish(On.BigNeedleWorm.orig_Swish orig,  BigNeedleWorm self)
+        {
+            orig.Invoke(self);
+
+            if (self.impaleChunk != null && self.impaleChunk.owner is Player)
+            {
+                return;
+            }
+            if (self.BigAI.focusCreature.representedCreature.realizedCreature is Player p && self.swishCounter == 0f)
+            {
+                for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+                {
+                    if (ExpeditionData.challengeList[j] is BingoDodgeNootChallenge c)
+                    {
+                        c.Dodged();
+                    }
+                }
+            }
+        }
+
+        public static void LizardTongue_Update(On.LizardTongue.orig_Update orig, LizardTongue self)
+        {
+            orig.Invoke(self);
+            if (self.state == LizardTongue.State.Attatched && self.attached.owner is Player)
+            {
+                for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+                {
+                    if (ExpeditionData.challengeList[j] is BingoLickChallenge c)
+                    {
+                        c.Licked(self.lizard);
                     }
                 }
             }

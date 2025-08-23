@@ -1,10 +1,12 @@
-﻿using BingoMode.BingoSteamworks;
+﻿using BingoMode.BingoRandomizer;
+using BingoMode.BingoSteamworks;
 using Expedition;
 using MoreSlugcats;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 using CreatureType = CreatureTemplate.Type;
@@ -13,54 +15,83 @@ using ItemType = AbstractPhysicalObject.AbstractObjectType;
 namespace BingoMode.BingoChallenges
 {
     using static ChallengeHooks;
+
+    public class BingoKillRandomizer : ChallengeRandomizer
+    {
+        public Randomizer<string> crit;
+        public Randomizer<string> weapon;
+        public Randomizer<int> amount;
+        public Randomizer<string> region;
+        public Randomizer<bool> deathPit;
+        public Randomizer<bool> starve;
+        public Randomizer<bool> oneCycle;
+        public Randomizer<bool> shrooms;
+
+        public override Challenge Random()
+        {
+            BingoKillChallenge challenge = new();
+            challenge.crit.Value = crit.Random();
+            challenge.weapon.Value = weapon.Random();
+            challenge.amount.Value = amount.Random();
+            challenge.region.Value = region.Random();
+            challenge.deathPit.Value = deathPit.Random();
+            challenge.starve.Value = starve.Random();
+            challenge.oneCycle.Value = oneCycle.Random();
+            challenge.shrooms.Value = shrooms.Random();
+            return challenge;
+        }
+
+        public override StringBuilder Serialize(string indent)
+        {
+            string surindent = indent + INDENT_INCREMENT;
+            StringBuilder serializedContent = new();
+            serializedContent.AppendLine($"{surindent}crit-{crit.Serialize(surindent)}");
+            serializedContent.AppendLine($"{surindent}weapon-{weapon.Serialize(surindent)}");
+            serializedContent.AppendLine($"{surindent}amount-{amount.Serialize(surindent)}");
+            serializedContent.AppendLine($"{surindent}region-{region.Serialize(surindent)}");
+            serializedContent.AppendLine($"{surindent}deathPit-{deathPit.Serialize(surindent)}");
+            serializedContent.AppendLine($"{surindent}starve-{starve.Serialize(surindent)}");
+            serializedContent.AppendLine($"{surindent}oneCycle-{oneCycle.Serialize(surindent)}");
+            serializedContent.AppendLine($"{surindent}shrooms-{shrooms.Serialize(surindent)}");
+            return base.Serialize(indent).Replace("__Type__", "Kill").Replace("__Content__", serializedContent.ToString());
+        }
+
+        public override void Deserialize(string serialized)
+        {
+            Dictionary<string, string> dict = ToDict(serialized);
+            crit = Randomizer<string>.InitDeserialize(dict["crit"]);
+            weapon = Randomizer<string>.InitDeserialize(dict["weapon"]);
+            amount = Randomizer<int>.InitDeserialize(dict["amount"]);
+            region = Randomizer<string>.InitDeserialize(dict["region"]);
+            deathPit = Randomizer<bool>.InitDeserialize(dict["deathPit"]);
+            starve = Randomizer<bool>.InitDeserialize(dict["starve"]);
+            oneCycle = Randomizer<bool>.InitDeserialize(dict["oneCycle"]);
+            shrooms = Randomizer<bool>.InitDeserialize(dict["shrooms"]);
+        }
+    }
+
     public class BingoKillChallenge : BingoChallenge
     {
         public SettingBox<string> crit;
         public SettingBox<string> weapon;
-        public int current; 
-        public SettingBox<int> amount; 
-        public SettingBox<string> region; 
-        public SettingBox<string> sub; 
-        //public SettingBox<string> room; 
-        public SettingBox<bool> deathPit; 
-        public SettingBox<bool> starve; 
+        public int current;
+        public SettingBox<int> amount;
+        public SettingBox<string> region;
+        public SettingBox<bool> deathPit;
+        public SettingBox<bool> starve;
         public SettingBox<bool> oneCycle;
+        public SettingBox<bool> shrooms;
 
-        public override Phrase ConstructPhrase()
+        public BingoKillChallenge()
         {
-            Phrase phrase = new Phrase([], []);
-
-            int newLine = 1;
-            List<int> newLines = [];
-            if (weapon.Value != "Any Weapon" || deathPit.Value)
-            {
-                phrase.words.Add(new Icon(deathPit.Value ? "deathpiticon" : ChallengeUtils.ItemOrCreatureIconName(weapon.Value), 1f, deathPit.Value ? Color.white : ChallengeUtils.ItemOrCreatureIconColor(weapon.Value)));
-                newLine++;
-            }
-            phrase.words.Add(new Icon("Multiplayer_Bones", 1f, Color.white));
-            if (crit.Value != "Any Creature")
-            {
-                phrase.words.Add(new Icon(ChallengeUtils.ItemOrCreatureIconName(crit.Value), 1f, ChallengeUtils.ItemOrCreatureIconColor(crit.Value)));
-                newLine++;
-            }
-            newLines.Add(newLine);
-            if (sub.Value != "Any Subregion" || region.Value != "Any Region")
-            {
-                phrase.words.Add(new Verse(sub.Value != "Any Subregion" ? sub.Value : region.Value));
-                newLine++;
-                newLines.Add(newLine);
-            }
-            phrase.words.Add(new Counter(current, amount.Value));
-            if (starve.Value)
-            {
-                phrase.words.Add(new Icon("Multiplayer_Death", 1f, Color.white));
-            }
-            if (oneCycle.Value)
-            {
-                phrase.words.Add(new Icon("cycle_limit", 1f, Color.white));
-            }
-            phrase.newLines = newLines.ToArray();
-            return phrase;
+            crit = new("", "Creature Type", 0, listName: "creatures");
+            amount = new(0, "Amount", 1);
+            starve = new(false, "While Starving", 2);
+            oneCycle = new(false, "In one Cycle", 3);
+            region = new("", "Region", 5, listName: "regions");
+            weapon = new("", "Weapon Used", 6, listName: "weaponsnojelly");
+            deathPit = new(false, "Via a Death Pit", 7);
+            shrooms = new(false, "While under mushroom effect", 8);
         }
 
         public override void UpdateDescription()
@@ -83,16 +114,38 @@ namespace BingoMode.BingoChallenges
                 ExpLog.Log("Error getting creature name for BingoKillChallenge | " + ex.Message);
             } 
             //                room.Value != "" ? room.Value : 
-            string location = sub.Value != "Any Subregion" ? sub.Value : region.Value != "Any Region" ? Region.GetRegionFullName(region.Value, ExpeditionData.slugcatPlayer) : "";
-            description = ChallengeTools.IGT.Translate("Kill [<current>/<amount>] <crit><location><pitorweapon><starving><onecycle>")
+            string location = region.Value != "Any Region" ? Region.GetRegionFullName(region.Value, ExpeditionData.slugcatPlayer) : "";
+            description = ChallengeTools.IGT.Translate("Kill [<current>/<amount>] <crit><location><pitorweapon><starving><onecycle><shrooms>")
                 .Replace("<current>", current.ToString())
                 .Replace("<amount>", amount.Value.ToString())
                 .Replace("<crit>", crit.Value != "Any Creature" ? newValue : "creatures")
                 .Replace("<location>", location != "" ? " in " + location : "")
                 .Replace("<pitorweapon>", deathPit.Value ? " with a death pit" : weapon.Value != "Any Weapon" ? " with " + ChallengeTools.ItemName(new(weapon.Value)) : "")
                 .Replace("<starving>", starve.Value ? " while starving" : "")
-                .Replace("<onecycle>", oneCycle.Value ? " in one cycle" : "");
+                .Replace("<onecycle>", oneCycle.Value ? " in one cycle" : "")
+                .Replace("<shrooms>", shrooms.Value ? " while under mushroom effect" : "");
             base.UpdateDescription();
+        }
+
+        public override Phrase ConstructPhrase()
+        {
+            Phrase phrase = new([[new Icon("Multiplayer_Bones")]]);
+            if (deathPit.Value) phrase.InsertWord(new Icon("deathpiticon"), 0, 0);
+            else if (weapon.Value != "Any Weapon") phrase.InsertWord(Icon.FromEntityName(weapon.Value), 0, 0);
+            if (crit.Value != "Any Creature") phrase.InsertWord(Icon.FromEntityName(crit.Value));
+
+            int lastLine = 1;
+            if (region.Value != "Any Region")
+            {
+                phrase.InsertWord(new Verse(region.Value), 1);
+                lastLine = 2;
+            }
+
+            phrase.InsertWord(new Counter(current, amount.Value), lastLine);
+            if (starve.Value) phrase.InsertWord(new Icon("Multiplayer_Death"), lastLine);
+            if (oneCycle.Value) phrase.InsertWord(new Icon("cycle_limit"), lastLine);
+            if (shrooms.Value) phrase.InsertWord(Icon.FromEntityName("Mushroom"), lastLine);
+            return phrase;
         }
 
         public override Challenge Generate()
@@ -132,10 +185,10 @@ namespace BingoMode.BingoChallenges
                 amount = new(num, "Amount", 1),
                 starve = new(starvv, "While Starving", 2),
                 oneCycle = new(onePiece, "In one Cycle", 3),
-                sub = new("Any Subregion", "Subregion", 4, listName: "subregions"),
                 region = new("Any Region", "Region", 5, listName: "regions"),
                 weapon = new(weapo, "Weapon Used", 6, listName: "weaponsnojelly"),
-                deathPit = new(false, "Via a Death Pit", 7)
+                deathPit = new(false, "Via a Death Pit", 7),
+                shrooms = new(false, "While under mushroom effect", 8)
             };
         }
 
@@ -156,7 +209,7 @@ namespace BingoMode.BingoChallenges
         public void DeathPit(Creature c, Player p)
         {
             if (c.Template.smallCreature || !deathPit.Value || TeamsCompleted[SteamTest.team] || hidden || completed || game == null || c == null || revealed || !CritInLocation(c)) return;
-            if (starve.Value && !p.Malnourished) return;
+            if (starve.Value && !p.Malnourished || shrooms.Value && p.mushroomCounter == 0) return;
             string type = c.abstractCreature.creatureTemplate.type.value;
             bool flag = crit != null && (
                 crit.Value == "Any Creature" ||
@@ -181,13 +234,9 @@ namespace BingoMode.BingoChallenges
 
         public bool CritInLocation(Creature crit)
         {
-            string location = sub.Value != "Any Subregion" ? sub.Value : region.Value != "Any Region" ? region.Value : "boowomp";
+            string location = region.Value != "Any Region" ? region.Value : "boowomp";
             AbstractRoom room = crit.room.abstractRoom;
-            if (location.ToLowerInvariant() == sub.Value.ToLowerInvariant())
-            {
-                return room.subregionName.ToLowerInvariant() == location.ToLowerInvariant() || room.altSubregionName.ToLowerInvariant() == location.ToLowerInvariant();
-            }
-            else if (location.ToLowerInvariant() == region.Value.ToLowerInvariant())
+            if (location.ToLowerInvariant() == region.Value.ToLowerInvariant())
             {
                 return room.world.region.name.ToLowerInvariant() == location.ToLowerInvariant();
             }
@@ -250,8 +299,6 @@ namespace BingoMode.BingoChallenges
                 "><",
                 region.ToString(),
                 "><",
-                sub.ToString(),
-                "><",
                 //room.ToString(),
                 //"><",
                 oneCycle.ToString(),
@@ -260,9 +307,11 @@ namespace BingoMode.BingoChallenges
                 "><",
                 starve.ToString(),
                 "><",
+                shrooms.ToString(),
+                "><",
                 completed ? "1" : "0",
                 "><",
-                revealed ? "1" : "0",
+                revealed ? "1" : "0"
             });
         }
 
@@ -281,18 +330,36 @@ namespace BingoMode.BingoChallenges
             try
             {
                 string[] array = Regex.Split(args, "><");
-                crit = SettingBoxFromString(array[0]) as SettingBox<string>;
-                weapon = SettingBoxFromString(array[1]) as SettingBox<string>;
-                amount = SettingBoxFromString(array[2]) as SettingBox<int>;
-                current = int.Parse(array[3], NumberStyles.Any, CultureInfo.InvariantCulture);
-                region = SettingBoxFromString(array[4]) as SettingBox<string>;
-                sub = SettingBoxFromString(array[5]) as SettingBox<string>;
-                //room = SettingBoxFromString(array[6]) as SettingBox<string>;
-                oneCycle = SettingBoxFromString(array[6]) as SettingBox<bool>;
-                deathPit = SettingBoxFromString(array[7]) as SettingBox<bool>;
-                starve = SettingBoxFromString(array[8]) as SettingBox<bool>;
-                completed = (array[9] == "1");
-                revealed = (array[10] == "1");
+                if (array[8].Contains("mushroom"))
+                {
+                    crit = SettingBoxFromString(array[0]) as SettingBox<string>;
+                    weapon = SettingBoxFromString(array[1]) as SettingBox<string>;
+                    amount = SettingBoxFromString(array[2]) as SettingBox<int>;
+                    current = int.Parse(array[3], NumberStyles.Any, CultureInfo.InvariantCulture);
+                    region = SettingBoxFromString(array[4]) as SettingBox<string>;
+                    oneCycle = SettingBoxFromString(array[5]) as SettingBox<bool>;
+                    deathPit = SettingBoxFromString(array[6]) as SettingBox<bool>;
+                    starve = SettingBoxFromString(array[7]) as SettingBox<bool>;
+                    shrooms = SettingBoxFromString(array[8]) as SettingBox<bool>;
+                    completed = (array[9] == "1");
+                    revealed = (array[10] == "1");
+                }
+                else
+                {
+                    crit = SettingBoxFromString(array[0]) as SettingBox<string>;
+                    weapon = SettingBoxFromString(array[1]) as SettingBox<string>;
+                    amount = SettingBoxFromString(array[2]) as SettingBox<int>;
+                    current = int.Parse(array[3], NumberStyles.Any, CultureInfo.InvariantCulture);
+                    region = SettingBoxFromString(array[4]) as SettingBox<string>;
+                    //subregion = SettingBoxFromString(array[5]) as SettingBox<string>;
+                    oneCycle = SettingBoxFromString(array[6]) as SettingBox<bool>;
+                    deathPit = SettingBoxFromString(array[7]) as SettingBox<bool>;
+                    starve = SettingBoxFromString(array[8]) as SettingBox<bool>;
+                    shrooms = SettingBoxFromString("System.Boolean|false|While under mushroom effect|8|NULL") as SettingBox<bool>;
+                    completed = (array[9] == "1");
+                    revealed = (array[10] == "1");
+                }
+
                 UpdateDescription();
             }
             catch (Exception ex)
@@ -309,11 +376,10 @@ namespace BingoMode.BingoChallenges
 
         public override void CreatureKilled(Creature c, int playerNumber)
         {
-            
             if (c.Template.smallCreature || deathPit.Value || TeamsCompleted[SteamTest.team] || hidden || completed || game == null || c == null || revealed) return;
             if (!CreatureHitByDesired(c)) return;
             if (!CritInLocation(c)) return;
-            if (starve.Value && game.Players != null && game.Players.Count > 0 && game.Players[playerNumber].realizedCreature is Player p && !p.Malnourished) return;
+            if (game.Players != null && game.Players.Count > 0 && game.Players[playerNumber].realizedCreature is Player p && ((starve.Value && !p.Malnourished) || (shrooms.Value && p.mushroomCounter == 0))) return;
             CreatureType type = c.abstractCreature.creatureTemplate.type;
             bool flag = crit.Value == "Any Creature" || type.value == crit.Value;
             if (!flag && crit.Value == "DaddyLongLegs" && type == CreatureType.BrotherLongLegs && (c as DaddyLongLegs).colorClass)
@@ -353,6 +419,6 @@ namespace BingoMode.BingoChallenges
             IL.Creature.Update -= Creature_UpdateIL;
         }
 
-        public override List<object> Settings() => [crit, weapon, amount, region, sub, oneCycle, deathPit, starve];
+        public override List<object> Settings() => [crit, weapon, amount, region, oneCycle, deathPit, starve, shrooms];
     }
 }

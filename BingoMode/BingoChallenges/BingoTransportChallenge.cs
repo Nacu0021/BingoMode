@@ -1,9 +1,11 @@
-﻿using BingoMode.BingoSteamworks;
+﻿using BingoMode.BingoRandomizer;
+using BingoMode.BingoSteamworks;
 using Expedition;
 using Menu.Remix;
 using MoreSlugcats;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 using CreatureType = CreatureTemplate.Type;
@@ -11,12 +13,55 @@ using CreatureType = CreatureTemplate.Type;
 namespace BingoMode.BingoChallenges
 {
     using static ChallengeHooks;
+
+    public class BingoTransportRandomizer : ChallengeRandomizer
+    {
+        public Randomizer<string> from;
+        public Randomizer<string> to;
+        public Randomizer<string> crit;
+
+        public override Challenge Random()
+        {
+            BingoTransportChallenge challenge = new();
+            challenge.from.Value = from.Random();
+            challenge.to.Value = to.Random();
+            challenge.crit.Value = crit.Random();
+            return challenge;
+        }
+
+        public override StringBuilder Serialize(string indent)
+        {
+            string surindent = indent + INDENT_INCREMENT;
+            StringBuilder serializedContent = new();
+            serializedContent.AppendLine($"{surindent}from-{from.Serialize(surindent)}");
+            serializedContent.AppendLine($"{surindent}to-{to.Serialize(surindent)}");
+            serializedContent.AppendLine($"{surindent}crit-{crit.Serialize(surindent)}");
+            return base.Serialize(indent).Replace("__Type__", "Transport").Replace("__Content__", serializedContent.ToString());
+        }
+
+        public override void Deserialize(string serialized)
+        {
+            Dictionary<string, string> dict = ToDict(serialized);
+            from = Randomizer<string>.InitDeserialize(dict["from"]);
+            to = Randomizer<string>.InitDeserialize(dict["to"]);
+            crit = Randomizer<string>.InitDeserialize(dict["crit"]);
+        }
+    }
+
     public class BingoTransportChallenge : BingoChallenge
     {
         public SettingBox<string> from;
         public SettingBox<string> to;
         public SettingBox<string> crit;
         public List<EntityID> origins = [];
+
+        public BingoTransportChallenge()
+        {
+            from = new("", "From Region", 0, listName: "regions");
+            to = new("", "To Region", 1, listName: "regions");
+            crit = new("", "Creature Type", 2, listName: "transport");
+            origins = [];
+        }
 
         public override void UpdateDescription()
         {
@@ -33,17 +78,11 @@ namespace BingoMode.BingoChallenges
 
         public override Phrase ConstructPhrase()
         {
-            Phrase phrase = new Phrase([new Icon(ChallengeUtils.ItemOrCreatureIconName(crit.Value), 1f, ChallengeUtils.ItemOrCreatureIconColor(crit.Value))], [1]);
-            if (from.Value != "Any Region")
-            {
-                phrase.words.Add(new Verse(from.Value));
-            }
-            phrase.words.Add(new Icon("singlearrow", 1f, Color.white));
-            if (to.Value != "Any Region")
-            {
-                phrase.words.Add(new Verse(to.Value));
-            }
-
+            Phrase phrase = new(
+                [[Icon.FromEntityName(crit.Value)],
+                [new Icon("singlearrow")]]);
+            if (from.Value != "Any Region") phrase.InsertWord(new Verse(from.Value), 1, 0);
+            if (to.Value != "Any Region") phrase.InsertWord(new Verse(to.Value), 1);
             return phrase;
         }
 
@@ -86,13 +125,12 @@ namespace BingoMode.BingoChallenges
                 if ((rr == from.Value || from.Value == "Any Region") && !origins.Contains(c.abstractCreature.ID))
                 {
                     origins.Add(c.abstractCreature.ID);
-                    
                 }
             }
         }
 
-        public void Gated(string regionName)
-        { 
+        public void Gate(string regionName)
+        {
             if (regionName != to.Value && to.Value != "Any Region") return;
             
             bool g = false;
@@ -197,13 +235,13 @@ namespace BingoMode.BingoChallenges
         public override void AddHooks()
         {
             On.Player.SlugcatGrab += Player_SlugcatGrab;
-            On.RegionGate.NewWorldLoaded_Room += RegionGate_NewWorldLoaded2;
+            On.WorldLoader.ctor_RainWorldGame_Name_Timeline_bool_string_Region_SetupValues += WorldLoader_Transport;
         }
 
         public override void RemoveHooks()
         {
             On.Player.SlugcatGrab -= Player_SlugcatGrab;
-            On.RegionGate.NewWorldLoaded_Room -= RegionGate_NewWorldLoaded2;
+            On.WorldLoader.ctor_RainWorldGame_Name_Timeline_bool_string_Region_SetupValues -= WorldLoader_Transport;
         }
 
         public override List<object> Settings() => [from, to, crit];

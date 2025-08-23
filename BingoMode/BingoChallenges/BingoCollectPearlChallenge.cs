@@ -1,4 +1,5 @@
-﻿using BingoMode.BingoSteamworks;
+﻿using BingoMode.BingoRandomizer;
+using BingoMode.BingoSteamworks;
 using Expedition;
 using Menu.Remix;
 using MoreSlugcats;
@@ -6,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 using PearlType = DataPearl.AbstractDataPearl.DataPearlType;
@@ -13,6 +15,42 @@ using PearlType = DataPearl.AbstractDataPearl.DataPearlType;
 namespace BingoMode.BingoChallenges
 {
     using static ChallengeHooks;
+
+    public class BingoCollectPearlRandomizer : ChallengeRandomizer
+    {
+        public Randomizer<string> pearl;
+        public Randomizer<int> amount;
+        public Randomizer<bool> specific;
+
+        public override Challenge Random()
+        {
+            BingoCollectPearlChallenge challenge = new();
+            challenge.pearl.Value = pearl.Random();
+            challenge.amount.Value = amount.Random();
+            challenge.specific.Value = specific.Random();
+            challenge.region = challenge.pearl.Value.Substring(0, 2);
+            return challenge;
+        }
+
+        public override StringBuilder Serialize(string indent)
+        {
+            string surindent = indent + INDENT_INCREMENT;
+            StringBuilder serializedContent = new();
+            serializedContent.AppendLine($"{surindent}pearl-{pearl.Serialize(surindent)}");
+            serializedContent.AppendLine($"{surindent}amount-{amount.Serialize(surindent)}");
+            serializedContent.AppendLine($"{surindent}specific-{specific.Serialize(surindent)}");
+            return base.Serialize(indent).Replace("__Type__", "CollectPearl").Replace("__Content__", serializedContent.ToString());
+        }
+
+        public override void Deserialize(string serialized)
+        {
+            Dictionary<string, string> dict = ToDict(serialized);
+            pearl = Randomizer<string>.InitDeserialize(dict["pearl"]);
+            amount = Randomizer<int>.InitDeserialize(dict["amount"]);
+            specific = Randomizer<bool>.InitDeserialize(dict["specific"]);
+        }
+    }
+
     public class BingoCollectPearlChallenge : BingoChallenge
     {
         public SettingBox<string> pearl; //PearlType
@@ -21,6 +59,14 @@ namespace BingoMode.BingoChallenges
         public int current;
         public SettingBox<int> amount;
         public SettingBox<bool> specific;
+
+        public BingoCollectPearlChallenge()
+        {
+            pearl = new("", "Pearl", 1, listName: "pearls");
+            collected = [];
+            amount = new (0, "Amount", 3);
+            specific = new(false, "Specific Pearl", 0);
+        }
 
         public override void UpdateDescription()
         {
@@ -38,14 +84,18 @@ namespace BingoMode.BingoChallenges
         {
             if (specific.Value)
             {
-                return new Phrase([new Verse(pearl.Value), new Icon("Symbol_Pearl", 1f, DataPearl.UniquePearlMainColor(new(pearl.Value, false))) { background = new FSprite("radialgradient") }, new Counter(current, 1)], [1, 2]);
+                return new Phrase(
+                    [[new Verse(pearl.Value)],
+                    [new Icon("Symbol_Pearl", 1f, DataPearl.UniquePearlMainColor(new(pearl.Value, false))) { background = new FSprite("radialgradient") }]]);
             }
-            return new Phrase([new Icon("pearlhoard_color", 1f, new Color(0.7f, 0.7f, 0.7f)), new Counter(current, amount.Value)], [1]);
+            return new Phrase(
+                [[Icon.PEARL_HOARD_COLOR],
+                [new Counter(current, amount.Value)]]);
         }
 
         public override bool Duplicable(Challenge challenge)
         {
-            return challenge is not BingoCollectPearlChallenge c || (c.specific.Value == true && specific.Value == true) || c.pearl.Value != pearl.Value;
+            return challenge is not BingoCollectPearlChallenge c || ((c.specific.Value && specific.Value) && c.pearl.Value != pearl.Value) || (c.specific.Value != specific.Value);
         }
 
         public override string ChallengeName()
@@ -123,6 +173,7 @@ namespace BingoMode.BingoChallenges
         {
             base.Reset();
             current = 0;
+            collected?.Clear();
             collected = [];
         }
 
@@ -138,7 +189,7 @@ namespace BingoMode.BingoChallenges
 
         public override bool ValidForThisSlugcat(SlugcatStats.Name slugcat)
         {
-            return slugcat != MoreSlugcatsEnums.SlugcatStatsName.Saint;
+            return true;
         }
 
         public override string ToString()

@@ -11,32 +11,32 @@ namespace BingoMode.BingoMenu
 {
     public class CreateLobbyDialog : Dialog, CheckBox.IOwnCheckBox
     {
-        float leftAnchor;
-        bool opening;
-        bool closing;
-        float uAlpha;
-        float currentAlpha;
-        float lastAlpha;
-        float targetAlpha;
-        float num;
-        FSprite pageTitle;
-        SimpleButton closeButton;
-        SimpleButton createButton;
-        CheckBox[] gamemode;
-        CheckBox friendsOnly;
-        CheckBox hostMods;
-        CheckBox[] perks;
-        CheckBox[] burdens;
-        FLabel[] labels;
-        FSprite[] dividers;
-        bool inLobby;
-        BingoPage owner;
-        MenuTabWrapper menuTabWrapper;
-        ConfigurableBase maxPlayersConf;
-        OpUpdown maxPlayers;
-        UIelementWrapper maxPlayersWrapper;
+        private float leftAnchor;
+        private bool opening;
+        private bool closing;
+        private float uAlpha;
+        private float currentAlpha;
+        private float lastAlpha;
+        private float targetAlpha;
+        private float num;
+        private FSprite pageTitle;
+        private SimpleButton closeButton;
+        private SimpleButton createButton;
+        private CheckBox[] gamemode;
+        private CheckBox friendsOnly;
+        private CheckBox hostMods;
+        private CheckBox[] perks;
+        private CheckBox[] burdens;
+        private FLabel[] labels;
+        private FSprite[] dividers;
+        private bool inLobby;
+        private PositionedMenuObject owner;
+        private MenuTabWrapper menuTabWrapper;
+        private ConfigurableBase maxPlayersConf;
+        private OpUpdown maxPlayers;
+        private UIelementWrapper maxPlayersWrapper;
 
-        public CreateLobbyDialog(ProcessManager manager, BingoPage owner, bool inLobby = false, bool host = false) : base(manager)
+        public CreateLobbyDialog(ProcessManager manager, PositionedMenuObject owner, bool inLobby = false, bool host = false) : base(manager)
         {
             this.inLobby = inLobby;
             float[] screenOffsets = Custom.GetScreenOffsets();
@@ -85,9 +85,9 @@ namespace BingoMode.BingoMenu
 
             perks = new CheckBox[3];
             burdens = new CheckBox[3];
-            gamemode = new CheckBox[3];
+            gamemode = new CheckBox[4];
             string[] texts = { "Allowed - ", "Disabled - ", "Host decides - " };
-            string[] gamemodes = { "Bingo - ", "Lockout - ", "Blackout - " };
+            string[] gamemodes = { "Bingo - ", "Lockout (ties) - ", "Lockout (no ties) - ", "Blackout - " };
             for (int i = 0; i < 3; i++)
             {
                 perks[i] = new CheckBox(this, pages[0], this, outOfBounds, 0f, texts[i], "PERJ" + i.ToString());
@@ -98,12 +98,14 @@ namespace BingoMode.BingoMenu
                 burdens[i].label.label.alignment = FLabelAlignment.Right;
                 pages[0].subObjects.Add(burdens[i]);
 
+                perks[i].buttonBehav.greyedOut = inLobby && !host;
+                burdens[i].buttonBehav.greyedOut = inLobby && !host;
+            }
+            for (int i = 0; i < 4; i++)
+            {
                 gamemode[i] = new CheckBox(this, pages[0], this, outOfBounds, 0f, gamemodes[i], "GAMJ" + i.ToString());
                 gamemode[i].label.label.alignment = FLabelAlignment.Right;
                 pages[0].subObjects.Add(gamemode[i]);
-
-                perks[i].buttonBehav.greyedOut = inLobby && !host;
-                burdens[i].buttonBehav.greyedOut = inLobby && !host;
                 gamemode[i].buttonBehav.greyedOut = inLobby && !host;
             }
 
@@ -138,7 +140,6 @@ namespace BingoMode.BingoMenu
             if (!inLobby) return;
             int players = maxPlayers.GetValueInt();
             SteamMatchmaking.SetLobbyMemberLimit(SteamTest.CurrentLobby, players);
-            
         }
 
         public override void Update()
@@ -191,11 +192,30 @@ namespace BingoMode.BingoMenu
             hostMods.pos = new Vector2(xPos, yTop);
             maxPlayers.pos = new Vector2(xPos, yTop - 35f);
 
+            // I'm sorry nacu it was my constitutional duty to center ts
+
             for (int i = 0; i < 3; i++)
             {
-                perks[i].pos = new Vector2(xPos - 120f + 120f * i, yTop - 150f);
-                burdens[i].pos = new Vector2(xPos - 120f + 120f * i, yTop - 200f);
-                gamemode[i].pos = new Vector2(xPos - 120f + 120f * i, yTop - 100f);
+                perks[i].pos = new Vector2(xPos - 120f + 126f * i, yTop - 150f);
+                burdens[i].pos = new Vector2(xPos - 120f + 126f * i, yTop - 200f);
+                if (perks[i].displayText == "Host decides - ")
+                {
+                    perks[i].pos.x += 20f;
+                    burdens[i].pos.x += 20f;
+                }
+            }
+
+            for (int i = 0; i < 4; i++)
+            {
+                gamemode[i].pos = new Vector2(xPos - 188f + 140f * i, yTop - 100f);
+                if (gamemode[i].displayText == "Bingo - ")
+                {
+                    gamemode[i].pos.x += 17f;
+                }
+                else if (gamemode[i].displayText == "Blackout - ")
+                {
+                    gamemode[i].pos.x -= 44f;
+                }
             }
 
             labels[0].SetPosition(pagePos + new Vector2(xPos, yTop - 115f));
@@ -274,6 +294,8 @@ namespace BingoMode.BingoMenu
                     case 1:
                         return BingoData.globalSettings.gamemode == BingoData.BingoGameMode.Lockout;
                     case 2:
+                        return BingoData.globalSettings.gamemode == BingoData.BingoGameMode.LockoutNoTies;
+                    case 3:
                         return BingoData.globalSettings.gamemode == BingoData.BingoGameMode.Blackout;
                 }
                 return false;
@@ -335,6 +357,9 @@ namespace BingoMode.BingoMenu
                         BingoData.globalSettings.gamemode = BingoData.BingoGameMode.Lockout;
                         break;
                     case 2:
+                        BingoData.globalSettings.gamemode = BingoData.BingoGameMode.LockoutNoTies;
+                        break;
+                    case 3:
                         BingoData.globalSettings.gamemode = BingoData.BingoGameMode.Blackout;
                         break;
                 }

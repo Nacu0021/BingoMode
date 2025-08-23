@@ -1,26 +1,63 @@
-﻿using Expedition;
+﻿using BingoMode.BingoRandomizer;
+using Expedition;
 using System;
 using System.Collections.Generic;
+using System.Security.Policy;
+using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
 namespace BingoMode.BingoChallenges
 {
     using static ChallengeHooks;
+
+    public class BingoUnlockRandomizer : ChallengeRandomizer
+    {
+        public Randomizer<string> unlock;
+
+        public override Challenge Random()
+        {
+            BingoUnlockChallenge challenge = new();
+            challenge.unlock.Value = unlock.Random();
+            return challenge;
+        }
+
+        public override StringBuilder Serialize(string indent)
+        {
+            string surindent = indent + INDENT_INCREMENT;
+            StringBuilder serializedContent = new();
+            serializedContent.AppendLine($"{surindent}unlock-{unlock.Serialize(surindent)}");
+            return base.Serialize(indent).Replace("__Type__", "Unlock").Replace("__Content__", serializedContent.ToString());
+        }
+
+        public override void Deserialize(string serialized)
+        {
+            Dictionary<string, string> dict = ToDict(serialized);
+            unlock = Randomizer<string>.InitDeserialize(dict["unlock"]);
+        }
+    }
+
     public class BingoUnlockChallenge : BingoChallenge
     {
         public SettingBox<string> unlock;
 
+        public BingoUnlockChallenge()
+        {
+            unlock = new("", "Unlock", 0, listName: "unlocks");
+        }
+
         public override void UpdateDescription()
         {
-            description = "Get the " + ChallengeTools.IGT.Translate(unlock.Value) + " unlock";
+            description = "Collect the " + ChallengeTools.IGT.Translate(unlock.Value) + " unlock";
             base.UpdateDescription();
         }
 
         public override Phrase ConstructPhrase()
         {
             UnlockIconData data = IconDataForUnlock(unlock.Value);
-            return new Phrase([new Icon("arenaunlock", 1f, data.iconColor), (data.unlockIconName == "" ? new Verse(unlock.Value) : new Icon(data.unlockIconName, 1f, data.unlockIconColor))], [1]);
+            return new Phrase(
+                [[new Icon("arenaunlock", 1f, data.iconColor)],
+                [(data.unlockIconName == "" ? new Verse(unlock.Value) : new Icon(data.unlockIconName, 1f, data.unlockIconColor))]]);
         }
 
         public struct UnlockIconData
@@ -90,7 +127,7 @@ namespace BingoMode.BingoChallenges
 
         public override string ChallengeName()
         {
-            return ChallengeTools.IGT.Translate("Getting arena unlocks");
+            return ChallengeTools.IGT.Translate("Collecting arena unlocks");
         }
 
         public override Challenge Generate()
@@ -105,7 +142,7 @@ namespace BingoMode.BingoChallenges
                 if (ExpeditionData.slugcatPlayer.value == "Rivulet" || ExpeditionData.slugcatPlayer.value == "Saint") { }
                 else goto gibacj;
             }
-            if (unl.ToLowerInvariant().StartsWith("ds"))
+            if (unl.ToLowerInvariant().StartsWith("ds") || unl.ToLowerInvariant().StartsWith("sh"))
             {
                 if (ExpeditionData.slugcatPlayer.value == "Saint") goto gibacj;
             }

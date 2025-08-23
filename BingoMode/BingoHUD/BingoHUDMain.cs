@@ -189,7 +189,7 @@ namespace BingoMode.BingoHUD
                             }
                         }
                     }
-                    bingoCompleteInfo.text = endGameInfo.subTitle.Replace("<team_name>", BingoPage.TeamName(endGameInfo.teams[0])) + "\n" + endGameInfo.evenSubtlerTitle;
+                    bingoCompleteInfo.text = endGameInfo.subTitle.Replace("<team_name>", BingoPage.TeamName[endGameInfo.teams[0]]) + "\n" + endGameInfo.evenSubtlerTitle;
                     bingoCompleteInfo.color = BingoPage.TEAM_COLOR[endGameInfo.teams[0]];
                     break;
 
@@ -201,7 +201,7 @@ namespace BingoMode.BingoHUD
                         completeQueue.Add(grid[g.x, g.y]);
                         grid[g.x, g.y].teamResponsible = endGameInfo.teams[0];
                     }
-                    bingoCompleteInfo.text = endGameInfo.subTitle.Replace("<team_name>", BingoPage.TeamName(endGameInfo.teams[0])) + "\n" + endGameInfo.evenSubtlerTitle;
+                    bingoCompleteInfo.text = endGameInfo.subTitle.Replace("<team_name>", BingoPage.TeamName[endGameInfo.teams[0]]) + "\n" + endGameInfo.evenSubtlerTitle;
                     bingoCompleteInfo.color = BingoPage.TEAM_COLOR[endGameInfo.teams[0]];
                     break;
                 case BingoCompleteReason.Tie:
@@ -279,145 +279,19 @@ namespace BingoMode.BingoHUD
                 }
                 else addText = "Press the button in the bingo HUD to end the bingo session for everyone.";
 
-                
+
                 List<int> teamsInBingo = BingoData.TeamsStringToList(BingoData.BingoSaves[ExpeditionData.slugcatPlayer].teamsInBingo);
-                Dictionary<int, int> completedForTeam = [];
 
                 switch (BingoData.BingoSaves[ExpeditionData.slugcatPlayer].gamemode)
                 {
                     case BingoData.BingoGameMode.Bingo:
-                        foreach (int t in teamsInBingo)
-                        {
-                            if (BingoHooks.GlobalBoard.CheckWin(t))
-                            {
-                                
-                                return new BingoCompleteInfo([t], isMultiplayer ? "Team <team_name> won!" : "You won!", addText, BingoCompleteReason.Bingo);
-                            }
-
-                            if (!songAlreadyPlayed && doDangerMusic && t != SteamTest.team && Custom.rainWorld.processManager != null && Custom.rainWorld.processManager.musicPlayer != null && BingoHooks.GlobalBoard.CheckMaxTeamSquaresInLine(t) == grid.GetLength(0) - 1)
-                            {
-                                BingoHooks.RequestBingoSong(Custom.rainWorld.processManager.musicPlayer, "Bingo - Scheming");
-                                BingoData.BingoSaves[ExpeditionData.slugcatPlayer].songPlayed = true;
-                                BingoSaveFile.Save();
-                            }
-                        }
-                        break;
+                        return GetBingoCompleteInfo(teamsInBingo, isMultiplayer, addText, songAlreadyPlayed, doDangerMusic);
                     case BingoData.BingoGameMode.Lockout:
-                        Dictionary<int, int> emptyForTeam = [];
-                        int majorityMargin = Mathf.FloorToInt(Mathf.Pow(grid.GetLength(0), 2f) / 2f);
-
-                        Dictionary<int, bool> teamsLost = []; // Teams that cant do a bingo
-                        foreach (int t in teamsInBingo)
-                        {
-                            teamsLost.Add(t, false);
-                            if (!BingoHooks.GlobalBoard.CheckLose(t)) teamsLost[t] = true;
-                        }
-
-                        foreach (int t in teamsInBingo)
-                        {
-                            // Bingo wins
-                            if (BingoHooks.GlobalBoard.CheckWin(t))
-                            {
-                                
-                                return new BingoCompleteInfo([t], isMultiplayer ? "Team <team_name> won!" : "You won!", addText, BingoCompleteReason.Bingo);
-                            }
-
-                            completedForTeam.Add(t, 0);
-                            emptyForTeam.Add(t, 0);
-                            foreach (var ch in ExpeditionData.challengeList)
-                            {
-                                BingoChallenge challenge = ch as BingoChallenge;
-                                if (challenge.TeamsCompleted[t]) completedForTeam[t]++;
-                            }
-                        }
-
-                        List<int> tieTeams = [];
-                        foreach (int t in teamsInBingo)
-                        {
-                            int otherLostTeams = 0;
-                            foreach (var kvp in teamsLost)
-                            {
-                                if (kvp.Key != t && kvp.Value == true) otherLostTeams++;
-                            }
-                            if (otherLostTeams != teamsInBingo.Count - 1) continue;
-
-                            if (completedForTeam[t] <= majorityMargin) continue;
-
-                            bool canWin = true;
-                            foreach (int o in teamsInBingo)
-                            {
-                                if (t == o) continue;
-                                
-                                
-                                if (completedForTeam[t] == completedForTeam[o])
-                                {
-                                    if (!tieTeams.Contains(t)) tieTeams.Add(t);
-                                    if (!tieTeams.Contains(o)) tieTeams.Add(o);
-                                    
-                                }
-                                if (tieTeams.Count > 0) continue;
-
-                                if (completedForTeam[o] + emptyForTeam[o] >= completedForTeam[t])
-                                {
-                                    canWin = false;
-                                    break;
-                                }
-                            }
-                            if (tieTeams.Count > 0) continue;
-
-                            if (canWin)
-                            {
-                                
-                                return new BingoCompleteInfo([t], "Team <team_name> won!", addText, BingoCompleteReason.Majority);
-                            }
-                        }
-
-                        if (tieTeams.Count > 0)
-                        {
-                            return new BingoCompleteInfo(tieTeams, "We have a tie!", addText, BingoCompleteReason.Tie);
-                        }
-
-                        foreach (int t in teamsInBingo)
-                        {
-                            if (!songAlreadyPlayed && doDangerMusic && t != SteamTest.team && Custom.rainWorld.processManager != null && Custom.rainWorld.processManager.musicPlayer != null && (BingoHooks.GlobalBoard.CheckMaxTeamSquaresInLine(t) == grid.GetLength(0) - 1 || completedForTeam[t] > majorityMargin - 3))
-                            {
-                                BingoHooks.RequestBingoSong(Custom.rainWorld.processManager.musicPlayer, "Bingo - Scheming");
-                                BingoData.BingoSaves[ExpeditionData.slugcatPlayer].songPlayed = true;
-                                BingoSaveFile.Save();
-                            }
-                        }
-                        break;
+                        return GetLockoutCompleteInfo(teamsInBingo, isMultiplayer, addText, songAlreadyPlayed, doDangerMusic, true);
+                    case BingoData.BingoGameMode.LockoutNoTies:
+                        return GetLockoutCompleteInfo(teamsInBingo, isMultiplayer, addText, songAlreadyPlayed, doDangerMusic, false);
                     case BingoData.BingoGameMode.Blackout:
-                        foreach (int t in teamsInBingo)
-                        {
-                            bool won = true;
-                            int squareCount = 0;
-                            foreach (var ch in ExpeditionData.challengeList)
-                            {
-                                BingoChallenge challenge = ch as BingoChallenge;
-                                if (challenge.TeamsCompleted[t])
-                                {
-                                    squareCount++;
-
-                                    if (!songAlreadyPlayed && doDangerMusic && t != SteamTest.team && Custom.rainWorld.processManager != null && Custom.rainWorld.processManager.musicPlayer != null && squareCount > (grid.GetLength(0) * grid.GetLength(0) - 2))
-                                    {
-                                        BingoHooks.RequestBingoSong(Custom.rainWorld.processManager.musicPlayer, "Bingo - Scheming");
-                                        BingoData.BingoSaves[ExpeditionData.slugcatPlayer].songPlayed = true;
-                                        BingoSaveFile.Save();
-                                    }
-                                    continue;
-                                }
-
-                                won = false;
-                            }
-
-                            if (won)
-                            {
-                                
-                                return new BingoCompleteInfo([t], isMultiplayer ? "Team <team_name> won!" : "You won!", addText, BingoCompleteReason.Blackout);
-                            }
-                        }
-                        break;
+                        return GetBlackoutCompleteInfo(teamsInBingo, isMultiplayer, addText, songAlreadyPlayed, doDangerMusic);
                 }
             }
             else // Singleplayer only has a one bingo win condition
@@ -432,16 +306,172 @@ namespace BingoMode.BingoHUD
             return null;
         }
 
+        private BingoCompleteInfo? GetBingoCompleteInfo(List<int> teamsInBingo, bool isMultiplayer, string addText, bool songAlreadyPlayed, bool doDangerMusic)
+        {
+            foreach (int t in teamsInBingo)
+            {
+                if (BingoHooks.GlobalBoard.CheckWin(t))
+                {
+                    return new BingoCompleteInfo([t], isMultiplayer ? "Team <team_name> won!" : "You won!", addText, BingoCompleteReason.Bingo);
+                }
+
+                if (!songAlreadyPlayed && doDangerMusic && t != SteamTest.team && Custom.rainWorld.processManager != null && Custom.rainWorld.processManager.musicPlayer != null && BingoHooks.GlobalBoard.CheckMaxTeamSquaresInLineForPlayingBingoThreatMusicYuh(t, false) == grid.GetLength(0) - 1)
+                {
+                    BingoHooks.RequestBingoSong(Custom.rainWorld.processManager.musicPlayer, "Bingo - Scheming");
+                    BingoData.BingoSaves[ExpeditionData.slugcatPlayer].songPlayed = true;
+                    BingoSaveFile.Save();
+                }
+            }
+
+            return null;
+        }
+
+        private BingoCompleteInfo? GetLockoutCompleteInfo(List<int> teamsInBingo, bool isMultiplayer, string addText, bool songAlreadyPlayed, bool doDangerMusic, bool allowTies)
+        {
+            Dictionary<int, int> completedForTeam = [];
+            Dictionary<int, int> emptyForTeam = [];
+            int majorityMargin = Mathf.FloorToInt(Mathf.Pow(grid.GetLength(0), 2f) / 2f);
+
+            Dictionary<int, bool> teamsLost = []; // Teams that cant do a bingo
+            foreach (int t in teamsInBingo)
+            {
+                teamsLost.Add(t, false);
+                if (!BingoHooks.GlobalBoard.CheckLose(t)) teamsLost[t] = true;
+            }
+
+            foreach (int t in teamsInBingo)
+            {
+                // Bingo wins
+                if (BingoHooks.GlobalBoard.CheckWin(t))
+                {
+                    return new BingoCompleteInfo([t], isMultiplayer ? "Team <team_name> won!" : "You won!", addText, BingoCompleteReason.Bingo);
+                }
+
+                completedForTeam.Add(t, 0);
+                emptyForTeam.Add(t, 0);
+                foreach (var ch in ExpeditionData.challengeList)
+                {
+                    BingoChallenge challenge = ch as BingoChallenge;
+                    if (challenge.TeamsCompleted[t]) completedForTeam[t]++;
+                    else if (allowTies)
+                    {
+                        bool addEmpty = true;
+                        foreach (int o in teamsInBingo)
+                        {
+                            if (o != t && challenge.TeamsCompleted[o])
+                            {
+                                addEmpty = false;
+                                break;
+                            }
+                        }
+                        if (addEmpty) emptyForTeam[t]++;
+                    }
+                }
+            }
+
+            List<int> tieTeams = [];
+            foreach (int t in teamsInBingo)
+            {
+                int otherLostTeams = 0;
+                foreach (var kvp in teamsLost)
+                {
+                    if (kvp.Key != t && kvp.Value == true) otherLostTeams++;
+                }
+                if (otherLostTeams != teamsInBingo.Count - 1) continue;
+
+                if (completedForTeam[t] <= majorityMargin) continue;
+
+                bool canWin = true;
+                if (allowTies)
+                {
+                    foreach (int o in teamsInBingo)
+                    {
+                        if (t == o) continue;
+
+                        if (completedForTeam[t] == completedForTeam[o])
+                        {
+                            if (!tieTeams.Contains(t)) tieTeams.Add(t);
+                            if (!tieTeams.Contains(o)) tieTeams.Add(o);
+
+                        }
+                        if (tieTeams.Count > 0) continue;
+
+                        if (completedForTeam[o] + emptyForTeam[o] >= completedForTeam[t])
+                        {
+                            canWin = false;
+                            break;
+                        }
+                    }
+                    if (tieTeams.Count > 0) continue;
+                }
+
+                if (canWin)
+                {
+                    return new BingoCompleteInfo([t], "Team <team_name> won!", addText, BingoCompleteReason.Majority);
+                }
+            }
+
+            if (allowTies && tieTeams.Count > 0)
+            {
+                return new BingoCompleteInfo(tieTeams, "We have a tie!", addText, BingoCompleteReason.Tie);
+            }
+
+            foreach (int t in teamsInBingo)
+            {
+                if (!songAlreadyPlayed && doDangerMusic && t != SteamTest.team && Custom.rainWorld.processManager != null && Custom.rainWorld.processManager.musicPlayer != null && (BingoHooks.GlobalBoard.CheckMaxTeamSquaresInLineForPlayingBingoThreatMusicYuh(t, true, teamsInBingo) == grid.GetLength(0) - 1 || completedForTeam[t] > majorityMargin - 3))
+                {
+                    BingoHooks.RequestBingoSong(Custom.rainWorld.processManager.musicPlayer, "Bingo - Scheming");
+                    BingoData.BingoSaves[ExpeditionData.slugcatPlayer].songPlayed = true;
+                    BingoSaveFile.Save();
+                }
+            }
+
+            return null;
+        }
+
+        private BingoCompleteInfo? GetBlackoutCompleteInfo(List<int> teamsInBingo, bool isMultiplayer, string addText, bool songAlreadyPlayed, bool doDangerMusic)
+        {
+            foreach (int t in teamsInBingo)
+            {
+                bool won = true;
+                int squareCount = 0;
+                foreach (var ch in ExpeditionData.challengeList)
+                {
+                    BingoChallenge challenge = ch as BingoChallenge;
+                    if (challenge.TeamsCompleted[t])
+                    {
+                        squareCount++;
+
+                        if (!songAlreadyPlayed && doDangerMusic && t != SteamTest.team && Custom.rainWorld.processManager != null && Custom.rainWorld.processManager.musicPlayer != null && squareCount > (grid.GetLength(0) * grid.GetLength(0) - 2))
+                        {
+                            BingoHooks.RequestBingoSong(Custom.rainWorld.processManager.musicPlayer, "Bingo - Scheming");
+                            BingoData.BingoSaves[ExpeditionData.slugcatPlayer].songPlayed = true;
+                            BingoSaveFile.Save();
+                        }
+                        continue;
+                    }
+
+                    won = false;
+                }
+
+                if (won)
+                {
+
+                    return new BingoCompleteInfo([t], isMultiplayer ? "Team <team_name> won!" : "You won!", addText, BingoCompleteReason.Blackout);
+                }
+            }
+
+            return null;
+        }
+
+
         public int CompletedChallengesForTeam(int team)
         {
             int all = 0;
-            for (int x = 0; x < grid.GetLength(0); x++)
-            {
-                for (int y = 0; y < grid.GetLength(0); y++)
-                {
-                    if ((BingoHooks.GlobalBoard.challengeGrid[x, y] as BingoChallenge).TeamsCompleted[team]) all++;
-                }
-            }
+            for (int j = 0; j < grid.GetLength(1); j++)
+                for (int i = 0; i < grid.GetLength(0); i++)
+                    if ((BingoHooks.GlobalBoard.challengeGrid[i, j] as BingoChallenge).TeamsCompleted[team])
+                        all++;
             
             return all;
         }
@@ -490,7 +520,7 @@ namespace BingoMode.BingoHUD
                 foreach (var kvp in completedForTeam)
                 {
                     
-                    addText += "\n" + BingoPage.TeamName(kvp.Key) + " - " + kvp.Value;
+                    addText += "\n" + BingoPage.TeamName[kvp.Key] + " - " + kvp.Value;
                 }
             }
             else
@@ -731,7 +761,8 @@ namespace BingoMode.BingoHUD
                             {
                                 Random.State state = Random.state;
                                 Random.InitState(obj.ID.RandomSeed);
-                                if (Random.value < 0.0015f)
+                                // 1/999
+                                if (Random.value < 0.000999f)
                                 {
                                     BingoHUDHint hint = new BingoHUDHint(obj.realizedObject, room.abstractRoom.index, "pipis", Color.white, new Vector2(-17f, -22f), player.abstractCreature.world.game.cameras[0]);
                                     hints.Add(hint);
@@ -788,9 +819,9 @@ namespace BingoMode.BingoHUD
         {
             grid = new BingoInfo[board.size, board.size];
 
-            for (int i = 0; i < grid.GetLength(0); i++)
+            for (int j = 0; j < grid.GetLength(1); j++)
             {
-                for (int j = 0; j < grid.GetLength(1); j++)
+                for (int i = 0; i < grid.GetLength(0); i++)
                 {
                     float size = (BingoData.SpectatorMode ? 475f : 420f) / board.size;
                     float topLeft = -size * board.size / 2f;
@@ -1320,7 +1351,7 @@ namespace BingoMode.BingoHUD
                     phrase.scale = size / 84f * scale;
                     if (shakeLock > 0f)
                     {
-                        phrase.words[0].display.rotation = Mathf.LerpAngle(-30f, 30f, UnityEngine.Random.value) * shakeLock;
+                        phrase.WordsFlat[0].display.rotation = Mathf.LerpAngle(-30f, 30f, UnityEngine.Random.value) * shakeLock;
                     }
                     phrase.Draw();
                 }
@@ -1461,7 +1492,7 @@ namespace BingoMode.BingoHUD
                 }
                 catch
                 {
-                    phrase = new Phrase([new Icon("Sandbox_QuestionMark", 1f, Color.white)], []);
+                    phrase = new Phrase([[new Icon("Sandbox_QuestionMark")]]);
                 }
                 if (context == AnimationContext.Lockout) shakeLock = 1f;
                 if (phrase != null)
@@ -1479,7 +1510,7 @@ namespace BingoMode.BingoHUD
                     infoLabel.text += "\nCompleted by: ";
                     for (int i = 0; i < (challenge as BingoChallenge).TeamsCompleted.Length; i++)
                     {
-                        if ((challenge as BingoChallenge).TeamsCompleted[i]) infoLabel.text += BingoPage.TeamName(i) + ", ";
+                        if ((challenge as BingoChallenge).TeamsCompleted[i]) infoLabel.text += BingoPage.TeamName[i] + ", ";
                     }
                     infoLabel.text = infoLabel.text.Substring(0, infoLabel.text.Length - 2); // Trim the last ", "
                 }
@@ -1488,7 +1519,7 @@ namespace BingoMode.BingoHUD
                     infoLabel.text += "\nFailed by: ";
                     for (int i = 0; i < (challenge as BingoChallenge).TeamsFailed.Length; i++)
                     {
-                        if ((challenge as BingoChallenge).TeamsFailed[i]) infoLabel.text += BingoPage.TeamName(i) + ", ";
+                        if ((challenge as BingoChallenge).TeamsFailed[i]) infoLabel.text += BingoPage.TeamName[i] + ", ";
                     }
                     infoLabel.text = infoLabel.text.Substring(0, infoLabel.text.Length - 2); // Trim the last ", "
                 }

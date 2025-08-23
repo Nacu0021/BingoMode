@@ -1,43 +1,111 @@
-﻿using BingoMode.BingoSteamworks;
+﻿using BingoMode.BingoRandomizer;
+using BingoMode.BingoSteamworks;
 using Expedition;
 using Menu.Remix;
 using MoreSlugcats;
 using RWCustom;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
 namespace BingoMode.BingoChallenges
 {
     using static ChallengeHooks;
+    using static MonoMod.InlineRT.MonoModRule;
+
+    public class BingoPearlHoardRandomizer : ChallengeRandomizer
+    {
+        public Randomizer<bool> common;
+        public Randomizer<string> region;
+        public Randomizer<int> amount;
+        public Randomizer<bool> anyShelter;
+
+        public override Challenge Random()
+        {
+            BingoPearlHoardChallenge challenge = new();
+            challenge.common.Value = common.Random();
+            challenge.region.Value = region.Random();
+            challenge.amount.Value = amount.Random();
+            challenge.anyShelter.Value = anyShelter.Random();
+            return challenge;
+        }
+
+        public override StringBuilder Serialize(string indent)
+        {
+            string surindent = indent + INDENT_INCREMENT;
+            StringBuilder serializedContent = new();
+            serializedContent.AppendLine($"{surindent}common-{common.Serialize(surindent)}");
+            serializedContent.AppendLine($"{surindent}region-{region.Serialize(surindent)}");
+            serializedContent.AppendLine($"{surindent}amount-{amount.Serialize(surindent)}");
+            serializedContent.AppendLine($"{surindent}anyShelter-{anyShelter.Serialize(surindent)}");
+            return base.Serialize(indent).Replace("__Type__", "PearlHoard").Replace("__Content__", serializedContent.ToString());
+        }
+
+        public override void Deserialize(string serialized)
+        {
+            Dictionary<string, string> dict = ToDict(serialized);
+            common = Randomizer<bool>.InitDeserialize(dict["common"]);
+            region = Randomizer<string>.InitDeserialize(dict["region"]);
+            amount = Randomizer<int>.InitDeserialize(dict["amount"]);
+            anyShelter = Randomizer<bool>.InitDeserialize(dict["anyShelter"]);
+        }
+    }
+
     public class BingoPearlHoardChallenge : BingoChallenge
     {
         public SettingBox<bool> common;
-        public SettingBox<string> region;
+        public int current;
         public SettingBox<int> amount;
+        public SettingBox<bool> anyShelter;
+        public SettingBox<string> region;
+        public List<string> collected = [];
+
+        public BingoPearlHoardChallenge()
+        {
+            common = new(false, "Common Pearls", 0);
+            amount = new(0, "Amount", 1);
+            anyShelter = new(false, "Any Shelter", 2);
+            region = new("", "Region", 3, listName: "regionsreal");
+        }
 
         public override void UpdateDescription()
         {
-            string newValue = this.common.Value ? ChallengeTools.IGT.Translate("common pearls") : ChallengeTools.IGT.Translate("colored pearls");
-            this.description = ChallengeTools.IGT.Translate("Store <amount> <target_pearl> in a shelter in <region_name>").Replace("<amount>", ValueConverter.ConvertToString<int>(this.amount.Value)).Replace("<target_pearl>", newValue).Replace("<region_name>", ChallengeTools.IGT.Translate(Region.GetRegionFullName(this.region.Value, ExpeditionData.slugcatPlayer)));
+            string location = region.Value != "Any Region" ? Region.GetRegionFullName(region.Value, ExpeditionData.slugcatPlayer) : "";
+            this.description = ChallengeTools.IGT.Translate("<action> [<current>/<amount>] <target_item> <shelter_type> shelter <location>")
+                .Replace("<action>", anyShelter.Value ? "Bring" : "Hoard")
+                .Replace("<current>", ValueConverter.ConvertToString(current))
+                .Replace("<amount>", ValueConverter.ConvertToString<int>(this.amount.Value))
+                .Replace("<target_item>", common.Value ? ChallengeTools.IGT.Translate("common pearls") : ChallengeTools.IGT.Translate("colored pearls"))
+                .Replace("<shelter_type>", anyShelter.Value ? "to any" : "in the same")
+                .Replace("<location>", location != "" ? "in " + location : "");
             base.UpdateDescription();
         }
 
         public override Phrase ConstructPhrase()
         {
-            return new Phrase([new Icon("ShelterMarker", 1f, Color.white), new Icon(common.Value ? "pearlhoard_normal" : "pearlhoard_color", 1f, new Color(0.7f, 0.7f, 0.7f)), new Verse(region.Value), new Counter(completed ? amount.Value : 0, amount.Value)], [3]);
+            Phrase phrase = anyShelter.Value ?
+                new Phrase([[common.Value ? Icon.PEARL_HOARD_NORMAL : Icon.PEARL_HOARD_COLOR, new Icon("singlearrow"), new Icon("doubleshelter")]]) :
+                new Phrase([[new Icon("ShelterMarker"), common.Value ? Icon.PEARL_HOARD_NORMAL : Icon.PEARL_HOARD_COLOR]]);
+            phrase.InsertWord(new Counter(current, amount.Value), 1);
+            if (region.Value != "Any Region")
+            {
+                phrase.InsertWord(new Verse(region.Value), 2);
+            }
+            return phrase;
         }
 
         public override bool Duplicable(Challenge challenge)
         {
-            return challenge is not BingoPearlHoardChallenge c || (c.common.Value != common.Value && c.region.Value != region.Value);
+            return challenge is not BingoPearlHoardChallenge c || c.common.Value != common.Value || c.region.Value != region.Value || c.anyShelter.Value != anyShelter.Value;
         }
 
         public override string ChallengeName()
         {
-            return ChallengeTools.IGT.Translate("Hoarding pearls in shelters");
+            return ChallengeTools.IGT.Translate("Putting pearls in shelters");
         }
 
         public override Challenge Generate()
@@ -54,12 +122,14 @@ namespace BingoMode.BingoChallenges
                 list.Remove("HR");
                 array = list.ToArray();
             }
-            string text = array[UnityEngine.Random.Range(0, array.Length)];
+            bool spec = UnityEngine.Random.value < 0.5f;
+            string region = spec ? "Any Region" : array[UnityEngine.Random.Range(0, array.Length)];
             return new BingoPearlHoardChallenge
             {
                 common = new(flag, "Common Pearls", 0),
                 amount = new(UnityEngine.Random.Range(2, 4), "Amount", 1),
-                region = new(text, "In Region", 2, listName: "regionsreal")
+                anyShelter = new(UnityEngine.Random.value < 0.5f, "Any Shelter", 2),
+                region = new(region, "Region", 3, listName: "regions"),
             };
         }
 
@@ -73,41 +143,94 @@ namespace BingoMode.BingoChallenges
             return false;
         }
 
+        // :slughollow:
         public override void Update()
         {
             base.Update();
-            if (completed || revealed || TeamsCompleted[SteamTest.team] || hidden || Custom.rainWorld.processManager.upcomingProcess != null) return;
+            if (completed || revealed || TeamsCompleted[SteamTest.team] || hidden || Custom.rainWorld.processManager.upcomingProcess != null)
+                return;
+
             for (int i = 0; i < this.game.Players.Count; i++)
             {
+                var player = this.game.Players[i];
+                if (player?.realizedCreature?.room == null || !player.realizedCreature.room.abstractRoom.shelter)
+                    continue;
+
                 int num = 0;
                 int num2 = 0;
-                if (this.game.Players[i] != null && this.game.Players[i].realizedCreature != null && this.game.Players[i].realizedCreature.room != null && this.game.Players[i].realizedCreature.room.abstractRoom.shelter && this.game.Players[i].world.name == this.region.Value)
+
+                foreach (var obj in player.realizedCreature.room.updateList)
                 {
-                    for (int j = 0; j < this.game.Players[i].realizedCreature.room.updateList.Count; j++)
+                    if (obj is DataPearl p && ItemInLocation(p.abstractPhysicalObject))
                     {
-                        if (this.game.Players[i].realizedCreature.room.updateList[j] is DataPearl)
+                        string id = p.abstractPhysicalObject.ID.ToString();
+                        bool isMisc = p.AbstractPearl.dataPearlType.value == DataPearl.AbstractDataPearl.DataPearlType.Misc.value
+                                      || p.AbstractPearl.dataPearlType.value == DataPearl.AbstractDataPearl.DataPearlType.Misc2.value;
+                        bool isColored = !isMisc || p is PebblesPearl;
+
+                        if (anyShelter.Value)
                         {
-                            if ((this.game.Players[i].realizedCreature.room.updateList[j] as DataPearl).AbstractPearl.dataPearlType.value != DataPearl.AbstractDataPearl.DataPearlType.Misc.value && (this.game.Players[i].realizedCreature.room.updateList[j] as DataPearl).AbstractPearl.dataPearlType.value != DataPearl.AbstractDataPearl.DataPearlType.Misc2.value)
+                            if (!collected.Contains(id))
                             {
-                                num2++;
+                                if ((isMisc && common.Value) || (isColored && !common.Value))
+                                {
+                                    collected.Add(id);
+                                    current++;
+                                    UpdateDescription();
+
+                                    if (current >= amount.Value)
+                                    {
+                                        CompleteChallenge();
+                                        return;
+                                    }
+                                    else
+                                    {
+                                        ChangeValue();
+                                    }
+                                }
                             }
-                            else
+                        }
+                        else
+                        {
+                            if (isMisc)
                             {
                                 num++;
+                                if (num >= amount.Value)
+                                {
+                                    current = num;
+                                    UpdateDescription();
+                                    CompleteChallenge();
+                                    return;
+                                }
                             }
-                        }
-                        if (this.game.Players[i].realizedCreature.room.updateList[j] is PebblesPearl)
-                        {
-                            num2++;
-                        }
-                        if ((this.common.Value && num >= this.amount.Value) || (!this.common.Value && num2 >= this.amount.Value))
-                        {
-                            this.CompleteChallenge();
-                            return;
+                            else if (isColored)
+                            {
+                                num2++;
+                                if (num2 >= amount.Value)
+                                {
+                                    current = num2;
+                                    UpdateDescription();
+                                    CompleteChallenge();
+                                    return;
+                                }
+                            }
+
+                            UpdateDescription();
                         }
                     }
                 }
             }
+        }
+
+        public bool ItemInLocation(AbstractPhysicalObject apo)
+        {
+            string location = region.Value != "Any Region" ? region.Value : "boowomp";
+            AbstractRoom room = apo.Room;
+            if (location.ToLowerInvariant() == region.Value.ToLowerInvariant())
+            {
+                return room.world.region.name.ToLowerInvariant() == location.ToLowerInvariant();
+            }
+            else return true;
         }
 
         public override string ToString()
@@ -118,13 +241,19 @@ namespace BingoMode.BingoChallenges
                 "~",
                 common.ToString(),
                 "><",
+                anyShelter.ToString(),
+                "><",
+                current.ToString(),
+                "><",
                 amount.ToString(),
                 "><",
-                this.region.ToString(),
+                region.ToString(),
                 "><",
-                this.completed ? "1" : "0",
+                completed ? "1" : "0",
                 "><",
-                this.revealed ? "1" : "0",
+                revealed ? "1" : "0",
+                "><",
+                string.Join("cLtD", collected)
             });
         }
 
@@ -133,12 +262,30 @@ namespace BingoMode.BingoChallenges
             try
             {
                 string[] array = Regex.Split(args, "><");
-                common = SettingBoxFromString(array[0]) as SettingBox<bool>;
-                amount = SettingBoxFromString(array[1]) as SettingBox<int>;
-                region = SettingBoxFromString(array[2]) as SettingBox<string>;
-                completed = (array[3] == "1");
-                revealed = (array[4] == "1");
-                UpdateDescription();
+                if (array.Length == 8)
+                {
+                    common = SettingBoxFromString(array[0]) as SettingBox<bool>;
+                    anyShelter = SettingBoxFromString(array[1]) as SettingBox<bool>;
+                    current = int.Parse(array[2], NumberStyles.Any, CultureInfo.InvariantCulture);
+                    amount = SettingBoxFromString(array[3]) as SettingBox<int>;
+                    region = SettingBoxFromString(array[4]) as SettingBox<string>;
+                    completed = (array[5] == "1");
+                    revealed = (array[6] == "1");
+                    string[] arr = Regex.Split(array[7], "cLtD");
+                    collected = [.. arr];
+                }
+                // Legacy board pearl hoard challenge compatibility
+                else
+                {
+                    common = SettingBoxFromString(array[0]) as SettingBox<bool>;
+                    amount = SettingBoxFromString(array[1]) as SettingBox<int>;
+                    region = SettingBoxFromString(array[2]) as SettingBox<string>;
+                    completed = (array[3] == "1");
+                    revealed = (array[4] == "1");
+                    anyShelter = SettingBoxFromString("System.Boolean|false|Any Shelter|2|NULL") as SettingBox<bool>;
+                    collected = [];
+                }
+                    UpdateDescription();
             }
             catch (Exception ex)
             {
@@ -160,6 +307,6 @@ namespace BingoMode.BingoChallenges
         {
         }
 
-        public override List<object> Settings() => [amount, region, common];
+        public override List<object> Settings() => [common, amount, anyShelter, region];
     }
 }

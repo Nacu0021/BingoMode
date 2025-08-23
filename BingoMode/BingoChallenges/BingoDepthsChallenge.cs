@@ -1,16 +1,50 @@
-﻿using BingoMode.BingoSteamworks;
+﻿using BingoMode.BingoRandomizer;
+using BingoMode.BingoSteamworks;
 using Expedition;
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Text.RegularExpressions;
 using CreatureType = CreatureTemplate.Type;
 
 namespace BingoMode.BingoChallenges
 {
     using static ChallengeHooks;
+
+    public class BingoDepthsRandomizer : ChallengeRandomizer
+    {
+        public Randomizer<string> crit;
+
+        public override Challenge Random()
+        {
+            BingoDepthsChallenge challenge = new();
+            challenge.crit.Value = crit.Random();
+            return challenge;
+        }
+
+        public override StringBuilder Serialize(string indent)
+        {
+            string surindent = indent + INDENT_INCREMENT;
+            StringBuilder serializedContent = new();
+            serializedContent.AppendLine($"{surindent}crit-{crit.Serialize(surindent)}");
+            return base.Serialize(indent).Replace("__Type__", "Depths").Replace("__Content__", serializedContent.ToString());
+        }
+
+        public override void Deserialize(string serialized)
+        {
+            Dictionary<string, string> dict = ToDict(serialized);
+            crit = Randomizer<string>.InitDeserialize(dict["crit"]);
+        }
+    }
+
     public class BingoDepthsChallenge : BingoChallenge
     {
         public SettingBox<string> crit;
+
+        public BingoDepthsChallenge()
+        {
+            crit = new("", "Creature Type", 0, listName: "depths");
+        }
 
         public override void UpdateDescription()
         {
@@ -18,16 +52,16 @@ namespace BingoMode.BingoChallenges
             {
                 ChallengeTools.CreatureName(ref ChallengeTools.creatureNames);
             }
-            description = ChallengeTools.IGT.Translate("Drop a <crit> into the depths drop room")
+            description = ChallengeTools.IGT.Translate("Drop a <crit> into the depths drop room (SB_D06)")
                 .Replace("<crit>", ChallengeTools.creatureNames[new CreatureType(crit.Value).Index].TrimEnd('s'));
             base.UpdateDescription();
         }
 
         public override Phrase ConstructPhrase()
         {
-            return new Phrase([new Icon(ChallengeUtils.ItemOrCreatureIconName(crit.Value), 1f, ChallengeUtils.ItemOrCreatureIconColor(crit.Value)),
-                new Icon("deathpiticon", 1f, UnityEngine.Color.white),
-                new Verse("SB_D06")], [2]);
+            return new Phrase(
+                [[Icon.FromEntityName(crit.Value), new Icon("deathpiticon")],
+                [new Verse("SB_D06")]]);
         }
 
         public override bool Duplicable(Challenge challenge)

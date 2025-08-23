@@ -15,33 +15,34 @@ namespace BingoMode.BingoMenu
 {
     public class CustomizerDialog : Dialog
     {
-        readonly int[] maxItems = [10, 5];
-        float leftAnchor;
-        bool opening;
-        bool closing;
-        float uAlpha;
-        float currentAlpha;
-        float lastAlpha;
-        float targetAlpha;
-        float sliderF;
-        float num;
-        bool onSettings;
-        bool lastOnSettings;
-        BingoButton owner;
-        FSprite pageTitle;
-        SimpleButton closeButton;
-        FSprite[] dividers;
-        FLabel description;
-        MenuLabel page;
-        SymbolButton randomize;
-        SymbolButton settings;
-        SymbolButton types;
-        List<Challenge> testList;
-        TypeButton[] testLabels;
-        VerticalSlider slider;
-        List<ChallengeSetting> challengeSettings;
-        MenuTab tab;
-        MenuTabWrapper wrapper;
+        private readonly int[] maxItems = [10, 5];
+        private float leftAnchor;
+        private bool opening;
+        private bool closing;
+        private float uAlpha;
+        private float currentAlpha;
+        private float lastAlpha;
+        private float targetAlpha;
+        private float sliderF;
+        private float num;
+        private bool onSettings;
+        private bool lastOnSettings;
+        private BingoButton owner;
+        private FSprite pageTitle;
+        private SimpleButton closeButton;
+        private FSprite[] dividers;
+        private FLabel description;
+        private MenuLabel page;
+        private SymbolButton randomize;
+        private SymbolButton settings;
+        private SymbolButton types;
+        private List<Challenge> testList;
+        private TypeButton[] testLabels;
+        private VerticalSlider slider;
+        private List<ChallengeSetting> challengeSettings;
+        private MenuTab tab;
+        private MenuTabWrapper wrapper;
+        private float scrollWheelVelocity;
 
         public CustomizerDialog(ProcessManager manager, BingoButton owner) : base(manager)
         {
@@ -123,7 +124,7 @@ namespace BingoMode.BingoMenu
             slider.subtleSliderNob.outerCircle.alpha = 0f;
             pages[0].subObjects.Add(slider);
 
-            testList = [.. BingoData.GetAdequateChallengeList(ExpeditionData.slugcatPlayer)];
+            testList = [.. BingoData.GetValidChallengeList(ExpeditionData.slugcatPlayer)];
             testLabels = new TypeButton[testList.Count];
             for (int i = 0; i < testList.Count; i++)
             {
@@ -183,6 +184,44 @@ namespace BingoMode.BingoMenu
                 return sliderF;
             }
             return 0f;
+        }
+
+        public override void Update()
+        {
+            base.Update();
+            lastAlpha = currentAlpha;
+            currentAlpha = Mathf.Lerp(currentAlpha, targetAlpha, 0.2f);
+            if (opening && pages[0].pos.y <= 0.01f)
+            {
+                opening = false;
+            }
+            if (closing && Math.Abs(currentAlpha - targetAlpha) < 0.09f)
+            {
+                pageTitle.RemoveFromContainer();
+                description.RemoveFromContainer();
+                for (int i = 0; i < 3; i++)
+                {
+                    dividers[i].RemoveFromContainer();
+                }
+                manager.StopSideProcess(this);
+                closing = false;
+                tab._Unload();
+                testList.Clear();
+            }
+            closeButton.buttonBehav.greyedOut = opening;
+
+            tab._Update();
+
+            if (manager.menuesMouseMode && mouseScrollWheelMovement != 0)
+            {
+                scrollWheelVelocity = Mathf.Sign(mouseScrollWheelMovement);
+            }
+            scrollWheelVelocity *= 0.8f;
+            if (scrollWheelVelocity != 0f)
+            {
+                SliderSetValue(slider, Mathf.Clamp01(ValueOfSlider(slider) - scrollWheelVelocity * 0.05f));
+            }
+            if (Mathf.Abs(scrollWheelVelocity) < 0.02f) scrollWheelVelocity = 0f;
         }
 
         public override void GrafUpdate(float timeStacker)
@@ -320,33 +359,6 @@ namespace BingoMode.BingoMenu
                 ListItem[] list = (s.field as OpComboBox)._itemList;
                 (s.field as OpComboBox).value = list[UnityEngine.Random.Range(0, list.Length)].name;
             }
-        }
-
-        public override void Update()
-        {
-            base.Update();
-            lastAlpha = currentAlpha;
-            currentAlpha = Mathf.Lerp(currentAlpha, targetAlpha, 0.2f);
-            if (opening && pages[0].pos.y <= 0.01f)
-            {
-                opening = false;
-            }
-            if (closing && Math.Abs(currentAlpha - targetAlpha) < 0.09f)
-            {
-                pageTitle.RemoveFromContainer();
-                description.RemoveFromContainer();
-                for (int i = 0; i < 3; i++)
-                {
-                    dividers[i].RemoveFromContainer();
-                }
-                manager.StopSideProcess(this);
-                closing = false;
-                tab._Unload();
-                testList.Clear();
-            }
-            closeButton.buttonBehav.greyedOut = opening;
-
-            tab._Update();
         }
 
         public void AssignChallenge(Challenge ch = null)

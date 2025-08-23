@@ -1,27 +1,64 @@
-﻿using Expedition;
+﻿using BingoMode.BingoRandomizer;
+using Expedition;
 using Menu.Remix;
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
 namespace BingoMode.BingoChallenges
 {
     using static ChallengeHooks;
+
+    public class BingoBroadcastRandomizer : ChallengeRandomizer
+    {
+        public Randomizer<string> chatLog;
+
+        public override Challenge Random()
+        {
+            BingoBroadcastChallenge challenge = new();
+            challenge.chatlog.Value = chatLog.Random();
+            return challenge;
+        }
+
+        public override StringBuilder Serialize(string indent)
+        {
+            string surindent = indent + INDENT_INCREMENT;
+            StringBuilder serializedContent = new();
+            serializedContent.AppendLine($"{surindent}chatLog-{chatLog.Serialize(surindent)}");
+            return base.Serialize(indent).Replace("__Type__", "Broadcast").Replace("__Content__", serializedContent.ToString());
+        }
+
+        public override void Deserialize(string serialized)
+        {
+            Dictionary<string, string> dict = ToDict(serialized);
+            chatLog = Randomizer<string>.InitDeserialize(dict["chatLog"]);
+        }
+    }
+
     public class BingoBroadcastChallenge : BingoChallenge
     {
         public SettingBox<string> chatlog;
+
+        public BingoBroadcastChallenge()
+        {
+            chatlog = new("", "Broadcast", 0, listName: "chatlogs");
+        }
+
         public override void UpdateDescription()
         {
             description = ChallengeTools.IGT.Translate("Collect the <chatlog> broadcast")
-                .Replace("<chatlog>", ValueConverter.ConvertToString(chatlog.Value));
+                .Replace("<chatlog>", ValueConverter.ConvertToString(chatlog.Value.Substring(8)));
 
             base.UpdateDescription();
         }
 
         public override Phrase ConstructPhrase()
         {
-            return new Phrase([new Icon("Symbol_Satellite", 1f, Color.white), new Verse(chatlog.Value)], [1]);
+            return new Phrase(
+                [[new Icon("arenaunlock", 1f, CollectToken.WhiteColor.rgb)],
+                [new Verse(chatlog.Value.Substring(8)), new Icon("Symbol_Satellite")]]);
         }
 
         public override bool Duplicable(Challenge challenge)

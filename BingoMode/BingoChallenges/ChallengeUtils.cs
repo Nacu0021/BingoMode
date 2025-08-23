@@ -10,6 +10,7 @@ using UnityEngine;
 using System;
 using System.IO;
 using RWCustom;
+using System.Data.SqlTypes;
 
 namespace BingoMode.BingoChallenges
 {
@@ -150,7 +151,7 @@ namespace BingoMode.BingoChallenges
                 case "unlocks": return [.. BingoData.possibleTokens[0], .. BingoData.possibleTokens[1], .. BingoData.possibleTokens[2], .. BingoData.possibleTokens[3]];
                 case "chatlogs": return [.. BingoData.possibleTokens[4]];
                 case "passage": return [.. WinState.EndgameID.values.entries.Where(x => x != "Mother" && x != "Gourmand")];
-                case "expobject": return ["FirecrackerPlant", "SporePlant", "FlareBomb", "FlyLure", "JellyFish", "Lantern", "Mushroom", "PuffBall", "ScavengerBomb", "VultureMask", "DangleFruit", "SlimeMold"];
+                case "expobject": return Storable;
                 case "vista": // hate
                     List<ValueTuple<string, string>> list = new List<ValueTuple<string, string>>();
                     foreach (KeyValuePair<string, Dictionary<string, Vector2>> keyValuePair in BingoVistaLocations)
@@ -169,7 +170,6 @@ namespace BingoMode.BingoChallenges
                         strings.Add(list[i].Item2);
                     }
                     return strings.ToArray();
-                case "subregions": return ["Any Subregion", .. (ExpeditionData.slugcatPlayer == MoreSlugcatsEnums.SlugcatStatsName.Saint ? SaintSubregions : AllSubregions)];
             }
             return ["Whoops something went wrong"];
         }
@@ -196,6 +196,7 @@ namespace BingoMode.BingoChallenges
             if (type == ItemType.DataPearl) return translator.Translate("Pearls");
             // Food items
             if (type == ItemType.DangleFruit) return translator.Translate("Blue Fruit");
+            if (type == ItemType.SSOracleSwarmer) return translator.Translate("Pebbles' Neurons");
             if (type == ItemType.EggBugEgg) return translator.Translate("Eggbug Eggs");
             if (type == ItemType.WaterNut) return translator.Translate("Bubble Fruit");
             if (type == ItemType.SlimeMold) return translator.Translate("Slime Mold");
@@ -302,95 +303,6 @@ namespace BingoMode.BingoChallenges
             "SmallCentipede",
             "Snail",
             "LanternMouse",
-        };
-
-        public static readonly string[] AllSubregions =
-        {
-            "Chimney Canopy",
-            "Drainage System",
-            "Garbage Wastes",
-            "Industrial Complex",
-            "Farm Arrays",
-            "Subterranean",
-            "Depths",
-            "Filtration System",
-            "Shaded Citadel",
-            "Memory Crypts",
-            "Sky Islands",
-            "Communications Array",
-            "Shoreline",
-            "Looks to the Moon",
-            "Five Pebbles",
-            "Five Pebbles (Memory Conflux)",
-            "Five Pebbles (Recursive Transform Array)",
-            "Five Pebbles (Unfortunate Development)",
-            "Five Pebbles (General Systems Bus)",
-            "Outskirts",
-            "The Leg",
-            "Underhang",
-            "The Wall",
-            // msc (THERES TOO MANY OF THEM
-            "The Gutter",
-            "The Precipice",
-            "Frosted Cathedral",
-            "The Husk",
-            "Silent Construct",
-            "Looks to the Moon (Abstract Convergence Manifold)",
-            "Struts",
-            "Looks to the Moon (Neural Terminus)",
-            "Luna",
-            "Looks to the Moon (Memory Conflux)",
-            "Looks to the Moon (Vents)",
-            "Metropolis",
-            "Atop the Tallest Tower",
-            "The Floor",
-            "12th Council Pillar, the House of Braids",
-            "Waterfront Facility",
-            "Waterfront Facility",
-            "The Shell",
-            "Submerged Superstructure",
-            "Submerged Superstructure (The Heart)",
-            "Auxiliary Transmission Array",
-            "Submerged Superstructure (Vents)",
-            "Bitter Aerie",
-            "Outer Expanse",
-            "Sunken Pier",
-            "Facility Roots (Western Intake)",
-            "Journey's End",
-            "The Rot",
-            "Five Pebbles (Primary Cortex)",
-            "The Rot (Depths)",
-            "The Rot (Cystic Conduit)",
-            "Five Pebbles (Linear Systems Rail)",
-            "Undergrowth",
-            "Pipeyard",
-            "Sump Tunnel"
-        };
-
-        public static readonly string[] SaintSubregions =
-        {
-            "Solitary Towers",
-            "Forgotten Conduit",
-            "Frosted Cathedral",
-            "The Husk",
-            "Silent Construct",
-            "Five Pebbles",
-            "Glacial Wasteland",
-            "Icy Monument",
-            "Desolate Fields",
-            "Primordial Underground",
-            "...",
-            "Ancient Labyrinth",
-            "Windswept Spires",
-            "Frozen Mast",
-            "Frigid Coast",
-            "Looks to the Moon",
-            "The Precipice",
-            "Suburban Drifts",
-            "Undergrowth",
-            "Barren Conduits",
-            "Desolate Canal",
-            "???"
         };
 
         public static readonly string[] Transportable =
@@ -500,6 +412,7 @@ namespace BingoMode.BingoChallenges
             "SlimeMold",
             "JellyFish",
             "Mushroom",
+            "SSOracleSwarmer",
 
             // MSC
             "GooieDuck",
@@ -544,7 +457,8 @@ namespace BingoMode.BingoChallenges
             "ScavengerBomb",
             "FirecrackerPlant",
             "BubbleGrass",
-            "Rock"
+            "Rock",
+            "DataPearl"
         };
 
         public static readonly string[] Befriendable =
@@ -612,6 +526,29 @@ namespace BingoMode.BingoChallenges
             "GlowWeed",
             "GooieDuck",
             "FireEgg",
+        };
+
+        public static readonly string[] Storable =
+        {
+            "FirecrackerPlant",
+            "SporePlant",
+            "FlareBomb",
+            "FlyLure",
+            "JellyFish",
+            "Lantern",
+            "Mushroom",
+            "PuffBall",
+            "ScavengerBomb",
+            "VultureMask",
+            "DangleFruit",
+            "SlimeMold",
+            "BubbleGrass",
+            "EggBugEgg",
+
+            // MSC
+            "GooieDuck",
+            "LillyPuck",
+            "DandelionPeach"
         };
     }
 }

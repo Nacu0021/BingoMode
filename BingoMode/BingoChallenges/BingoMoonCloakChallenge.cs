@@ -1,39 +1,68 @@
-﻿using BingoMode.BingoSteamworks;
+﻿using BingoMode.BingoRandomizer;
+using BingoMode.BingoSteamworks;
 using Expedition;
-using MoreSlugcats;
 using Menu.Remix;
+using MoreSlugcats;
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
 namespace BingoMode.BingoChallenges
 {
     using static ChallengeHooks;
+
+    public class BingoMoonCloakRandomizer : ChallengeRandomizer
+    {
+        public Randomizer<bool> deliver;
+
+        public override Challenge Random()
+        {
+            BingoMoonCloakChallenge challenge = new();
+            challenge.deliver.Value = deliver.Random();
+            return challenge;
+        }
+
+        public override StringBuilder Serialize(string indent)
+        {
+            string surindent = indent + INDENT_INCREMENT;
+            StringBuilder serializedContent = new();
+            serializedContent.AppendLine($"{surindent}deliver-{deliver.Serialize(surindent)}");
+            return base.Serialize(indent).Replace("__Type__", "MoonCloak").Replace("__Content__", serializedContent.ToString());
+        }
+
+        public override void Deserialize(string serialized)
+        {
+            Dictionary<string, string> dict = ToDict(serialized);
+            deliver = Randomizer<bool>.InitDeserialize(dict["deliver"]);
+        }
+    }
+
     public class BingoMoonCloakChallenge : BingoChallenge
     {
         public SettingBox<bool> deliver;
 
+        public BingoMoonCloakChallenge()
+        {
+            deliver = new(false, "Deliver", 0);
+        }
+
         public override void UpdateDescription()
         {
-            description = ChallengeTools.IGT.Translate(!deliver.Value ? "Grab Moon's Cloak" : "Deliver the Cloak to Moon");
+            description = ChallengeTools.IGT.Translate(!deliver.Value ? "Collect Moon's Cloak" : "Deliver the Cloak to Moon");
             base.UpdateDescription();
         }
 
         public override Phrase ConstructPhrase()
         {
-            if (!deliver.Value)
+            Phrase phrase = new([[new Icon("Symbol_MoonCloak", 1f, new Color(0.8f, 0.8f, 0.8f))]]);
+            if (deliver.Value)
             {
-                return new Phrase([new Icon("Symbol_MoonCloak", 1f, new Color(0.8f, 0.8f, 0.8f))], []);
+                phrase.InsertWord(new Icon("singlearrow"));
+                phrase.InsertWord(Icon.MOON);
             }
-            else
-            {
-                return new Phrase([
-                new Icon("Symbol_MoonCloak", 1f, new Color(0.8f, 0.8f, 0.8f)),
-                new Icon("singlearrow", 1f, Color.white),
-                new Icon("GuidanceMoon" , 1f, new Color(1f, 0.8f, 0.3f))
-                ], []);
-            }
+            return phrase;
         }
 
         public override bool Duplicable(Challenge challenge)
@@ -43,14 +72,14 @@ namespace BingoMode.BingoChallenges
 
         public override string ChallengeName()
         {
-            return ChallengeTools.IGT.Translate("Moon's Cloak");
+            return ChallengeTools.IGT.Translate("Collecting or delivering Moon's cloak");
         }
 
         public override Challenge Generate()
         {
             BingoMoonCloakChallenge ch = new BingoMoonCloakChallenge
             {
-                deliver = new(UnityEngine.Random.value < 0.5f, "Deliver", 0)
+                deliver = new(true, "Deliver", 0)
             };
 
             return ch;
@@ -84,7 +113,7 @@ namespace BingoMode.BingoChallenges
 
         public override bool ValidForThisSlugcat(SlugcatStats.Name slugcat)
         {
-            return slugcat == SlugcatStats.Name.Red || slugcat == MoreSlugcatsEnums.SlugcatStatsName.Gourmand || slugcat == SlugcatStats.Name.White || slugcat == SlugcatStats.Name.Yellow;
+            return ((slugcat == SlugcatStats.Name.Red || slugcat == MoreSlugcatsEnums.SlugcatStatsName.Gourmand || slugcat == SlugcatStats.Name.White || slugcat == SlugcatStats.Name.Yellow) && ModManager.MSC);
         }
 
         public override string ToString()

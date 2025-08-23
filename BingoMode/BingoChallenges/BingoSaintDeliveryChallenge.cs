@@ -1,14 +1,38 @@
-﻿using BingoMode.BingoSteamworks;
+﻿using BingoMode.BingoRandomizer;
+using BingoMode.BingoSteamworks;
 using Expedition;
 using MoreSlugcats;
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
 namespace BingoMode.BingoChallenges
 {
     using static ChallengeHooks;
+
+    public class BingoSaintDeliveryRandomizer : ChallengeRandomizer
+    {
+        public override Challenge Random()
+        {
+            BingoSaintDeliveryChallenge challenge = new();
+            return challenge;
+        }
+
+        public override StringBuilder Serialize(string indent)
+        {
+            string surindent = indent + INDENT_INCREMENT;
+            StringBuilder serializedContent = new();
+            return base.Serialize(indent).Replace("__Type__", "SaintDelivery").Replace("__Content__", serializedContent.ToString());
+        }
+
+        public override void Deserialize(string serialized)
+        {
+            Dictionary<string, string> dict = ToDict(serialized);
+        }
+    }
+
     public class BingoSaintDeliveryChallenge : BingoChallenge
     {
         public override void UpdateDescription()
@@ -19,7 +43,7 @@ namespace BingoMode.BingoChallenges
 
         public override Phrase ConstructPhrase()
         {
-            return new Phrase([new Icon("memoriespearl", 1f, Color.white), new Icon("singlearrow", 1f, Color.white), new Icon("nomscpebble", 1f, new Color(0.44705883f, 0.9019608f, 0.76862746f))], []);
+            return new Phrase([[new Icon("memoriespearl"), new Icon("singlearrow"), Icon.PEBBLES]]);
         }
 
         public override bool Duplicable(Challenge challenge)
@@ -93,14 +117,14 @@ namespace BingoMode.BingoChallenges
         public override void AddHooks()
         {
             On.SaveState.ctor += SaveState_ctorHalcyon;
-            On.MoreSlugcats.CLOracleBehavior.Update += CLOracleBehavior_Update;
+            On.MoreSlugcats.CLOracleBehavior.Update += CLOracleBehavior_Update_SaintDelivery;
             IL.Room.Loaded += Room_LoadedHalcyon;
         }
 
         public override void RemoveHooks()
         {
             On.SaveState.ctor -= SaveState_ctorHalcyon;
-            On.MoreSlugcats.CLOracleBehavior.Update -= CLOracleBehavior_Update;
+            On.MoreSlugcats.CLOracleBehavior.Update -= CLOracleBehavior_Update_SaintDelivery;
             IL.Room.Loaded -= Room_LoadedHalcyon;
         }
 

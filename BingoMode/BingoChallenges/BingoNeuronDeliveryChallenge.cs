@@ -1,20 +1,54 @@
-﻿using BingoMode.BingoSteamworks;
+﻿using BingoMode.BingoRandomizer;
+using BingoMode.BingoSteamworks;
 using Expedition;
 using Menu.Remix;
 using MoreSlugcats;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
 namespace BingoMode.BingoChallenges
 {
     using static ChallengeHooks;
+
+    public class BingoNeuronDeliveryRandomizer : ChallengeRandomizer
+    {
+        public Randomizer<int> neurons;
+
+        public override Challenge Random()
+        {
+            BingoNeuronDeliveryChallenge challenge = new();
+            challenge.neurons.Value = neurons.Random();
+            return challenge;
+        }
+
+        public override StringBuilder Serialize(string indent)
+        {
+            string surindent = indent + INDENT_INCREMENT;
+            StringBuilder serializedContent = new();
+            serializedContent.AppendLine($"{surindent}neurons-{neurons.Serialize(surindent)}");
+            return base.Serialize(indent).Replace("__Type__", "NeuronDelivery").Replace("__Content__", serializedContent.ToString());
+        }
+
+        public override void Deserialize(string serialized)
+        {
+            Dictionary<string, string> dict = ToDict(serialized);
+            neurons = Randomizer<int>.InitDeserialize(dict["neurons"]);
+        }
+    }
+
     public class BingoNeuronDeliveryChallenge : BingoChallenge
     {
         public SettingBox<int> neurons;
         public int delivered;
+
+        public BingoNeuronDeliveryChallenge()
+        {
+            neurons = new(0, "Amount of Neurons", 0);
+        }
 
         public override bool ValidForThisSlugcat(SlugcatStats.Name slugcat)
         {
@@ -23,7 +57,7 @@ namespace BingoMode.BingoChallenges
 
         public override void UpdateDescription()
         {
-            this.description = ChallengeTools.IGT.Translate("Neurons delivered to Looks to the Moon <progress>").Replace("<progress>", string.Concat(new string[]
+            this.description = ChallengeTools.IGT.Translate("Deliver <progress> neurons to Looks to the Moon").Replace("<progress>", string.Concat(new string[]
             {
                 "[",
                 this.delivered.ToString(),
@@ -36,12 +70,14 @@ namespace BingoMode.BingoChallenges
 
         public override Phrase ConstructPhrase()
         {
-            return new Phrase([new Icon("Symbol_Neuron", 1f, Color.white), new Icon("singlearrow", 1f, Color.white), new Icon("GuidanceMoon", 1f, new Color(1f, 0.8f, 0.3f)), new Counter(delivered, neurons.Value)], [3]);
+            return new Phrase(
+                [[new Icon("Symbol_Neuron"), new Icon("singlearrow"), Icon.MOON],
+                [new Counter(delivered, neurons.Value)]]);
         }
 
         public override string ChallengeName()
         {
-            return ChallengeTools.IGT.Translate("Gifting neurons");
+            return ChallengeTools.IGT.Translate("Delivering neurons");
         }
 
         public override void Update()

@@ -1,14 +1,45 @@
-﻿using BingoMode.BingoSteamworks;
+﻿using BingoMode.BingoRandomizer;
+using BingoMode.BingoSteamworks;
 using Expedition;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
 namespace BingoMode.BingoChallenges
 {
     using static ChallengeHooks;
+    public class BingoAllRegionsExceptRandomizer : ChallengeRandomizer
+    {
+        public Randomizer<string> region;
+        public Randomizer<int> required;
+
+        public override Challenge Random()
+        {
+            BingoAllRegionsExcept challenge = new();
+            challenge.region.Value = region.Random();
+            challenge.required.Value = required.Random();
+            return challenge;
+        }
+
+        public override StringBuilder Serialize(string indent)
+        {
+            string surindent = indent + INDENT_INCREMENT;
+            StringBuilder serializedContent = new();
+            serializedContent.AppendLine($"{surindent}region-{region.Serialize(surindent)}");
+            serializedContent.AppendLine($"{surindent}required-{required.Serialize(surindent)}");
+            return base.Serialize(indent).Replace("__Type__", "AllRegionExcept").Replace("__Content__", serializedContent.ToString());
+        }
+
+        public override void Deserialize(string serialized)
+        {
+            Dictionary<string, string> dict = ToDict(serialized);
+            region = Randomizer<string>.InitDeserialize(dict["region"]);
+            required = Randomizer<int>.InitDeserialize(dict["required"]);
+        }
+    }
     public class BingoAllRegionsExcept : BingoChallenge
     {
         public SettingBox<string> region;
@@ -16,16 +47,25 @@ namespace BingoMode.BingoChallenges
         public List<string> regionsToEnter = [];
         public int current;
 
+        public BingoAllRegionsExcept()
+        {
+            region = new("", "Region", 0, listName: "regionsreal");
+            regionsToEnter = [.. ChallengeUtils.AllEnterableRegions];
+            required = new(0, "Amount", 1);
+        }
+
         public override void UpdateDescription()
         {
-            this.description = ChallengeTools.IGT.Translate("Enter [<current>/<required>] regions without visiting " + Region.GetRegionFullName(region.Value, ExpeditionData.slugcatPlayer))
+            this.description = ChallengeTools.IGT.Translate("Enter [<current>/<required>] regions without entering " + Region.GetRegionFullName(region.Value, ExpeditionData.slugcatPlayer))
                 .Replace("<required>", required.Value.ToString()).Replace("<current>", current.ToString());
             base.UpdateDescription();
         }
 
         public override Phrase ConstructPhrase()
         {
-            return new Phrase([new Icon("TravellerA", 1f, Color.white), new Icon("buttonCrossA", 1f, Color.red), new Verse(region.Value), new Counter(current, required.Value)], [3]);
+            return new Phrase(
+                [[new Icon("TravellerA"), new Icon("buttonCrossA", 1f, Color.red), new Verse(region.Value)],
+                [new Counter(current, required.Value)]]);
         }
 
         public override bool Duplicable(Challenge challenge)
@@ -48,7 +88,7 @@ namespace BingoMode.BingoChallenges
         {
             List<string> regiones = ChallengeUtils.GetSortedCorrectListForChallenge("regionsreal").ToList();
             string regionn = regiones[UnityEngine.Random.Range(0, regiones.Count)];
-            int req = UnityEngine.Random.Range(3, regiones.Count);
+            int req = UnityEngine.Random.Range(3, regiones.Count - 4);
 
             return new BingoAllRegionsExcept
             {
@@ -140,12 +180,12 @@ namespace BingoMode.BingoChallenges
 
         public override void AddHooks()
         {
-            On.WorldLoader.ctor_RainWorldGame_Name_Timeline_bool_string_Region_SetupValues += WorldLoaderNoRegion2;
+            On.WorldLoader.ctor_RainWorldGame_Name_Timeline_bool_string_Region_SetupValues += WorldLoader_AllRegionsExcept;
         }
 
         public override void RemoveHooks()
         {
-            On.WorldLoader.ctor_RainWorldGame_Name_Timeline_bool_string_Region_SetupValues -= WorldLoaderNoRegion2;
+            On.WorldLoader.ctor_RainWorldGame_Name_Timeline_bool_string_Region_SetupValues -= WorldLoader_AllRegionsExcept;
         }
 
         public override List<object> Settings() => [region, required];

@@ -1,19 +1,56 @@
-﻿using Expedition;
-using System;
-using UnityEngine;
-using System.Collections.Generic;
-using System.Text.RegularExpressions;
+﻿using BingoMode.BingoRandomizer;
 using BingoMode.BingoSteamworks;
+using Expedition;
+using System;
+using System.Collections.Generic;
+using System.Text;
+using System.Text.RegularExpressions;
+using UnityEngine;
 
 namespace BingoMode.BingoChallenges
 {
     using static ChallengeHooks;
+
+    public class BingoDontUseItemRandomizer : ChallengeRandomizer
+    {
+        public Randomizer<string> item;
+
+        public override Challenge Random()
+        {
+            BingoDontUseItemChallenge challenge = new();
+            challenge.item.Value = item.Random();
+            int index = Array.IndexOf(ChallengeUtils.FoodTypes, challenge.item.Value);
+            challenge.isFood = index >= 0;
+            challenge.isCreature = index >= Array.IndexOf(ChallengeUtils.FoodTypes, "VultureGrub");
+            return challenge;
+        }
+
+        public override StringBuilder Serialize(string indent)
+        {
+            string surindent = indent + INDENT_INCREMENT;
+            StringBuilder serializedContent = new();
+            serializedContent.AppendLine($"{surindent}item-{item.Serialize(surindent)}");
+            return base.Serialize(indent).Replace("__Type__", "DontUseItem").Replace("__Content__", serializedContent.ToString());
+        }
+
+        public override void Deserialize(string serialized)
+        {
+            Dictionary<string, string> dict = ToDict(serialized);
+            item = Randomizer<string>.InitDeserialize(dict["item"]);
+        }
+    }
+
     //Using counts as either throwing an item, or holding it for more than 5 seconds
     public class BingoDontUseItemChallenge : BingoChallenge
     {
         public SettingBox<string> item;
         public bool isFood;
         public bool isCreature;
+
+        public BingoDontUseItemChallenge()
+        {
+            item = new("", "Item type", 0, listName: "banitem");
+        }
 
         public override void UpdateDescription()
         {
@@ -24,7 +61,7 @@ namespace BingoMode.BingoChallenges
 
         public override Phrase ConstructPhrase()
         {
-            return new Phrase([new Icon("buttonCrossA", 1f, Color.red), new Icon(ChallengeUtils.ItemOrCreatureIconName(item.Value), 1f, ChallengeUtils.ItemOrCreatureIconColor(item.Value))], []);
+            return new Phrase([[new Icon("buttonCrossA", 1f, Color.red), Icon.FromEntityName(item.Value)]]);
         }
 
         public override bool Duplicable(Challenge challenge)
@@ -88,6 +125,16 @@ namespace BingoMode.BingoChallenges
             for (int i = 0; i < BingoData.heldItemsTime.Length; i++)
             {
                 if (i == (int)new AbstractPhysicalObject.AbstractObjectType(item.Value) && BingoData.heldItemsTime[i] > 200) Used(new(item.Value)); 
+            }
+            for (int i = 0; i < game.Players.Count; i++)
+            {
+                if (game.Players[i] != null && game.Players[i].realizedCreature is Player player && player.room != null)
+                {
+                    if (player.objectInStomach != null && player.objectInStomach.type.value == item.Value)
+                    {
+                        Used(new(item.Value));
+                    }
+                }
             }
         }
 

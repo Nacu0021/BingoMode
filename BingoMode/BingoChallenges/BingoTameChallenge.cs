@@ -1,16 +1,53 @@
-﻿using BingoMode.BingoSteamworks;
+﻿using BingoMode.BingoRandomizer;
+using BingoMode.BingoSteamworks;
 using Expedition;
-using MoreSlugcats;
 using Menu.Remix;
+using MoreSlugcats;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
-using System.Globalization;
 
 namespace BingoMode.BingoChallenges
 {
     using static ChallengeHooks;
+
+    public class BingoTameRandomizer : ChallengeRandomizer
+    {
+        public Randomizer<string> crit;
+        public Randomizer<int> amount;
+        public Randomizer<bool> specific;
+
+        public override Challenge Random()
+        {
+            BingoTameChallenge challenge = new();
+            challenge.crit.Value = crit.Random();
+            challenge.amount.Value = amount.Random();
+            challenge.specific.Value = specific.Random();
+            return challenge;
+        }
+
+        public override StringBuilder Serialize(string indent)
+        {
+            string surindent = indent + INDENT_INCREMENT;
+            StringBuilder serializedContent = new();
+            serializedContent.AppendLine($"{surindent}crit-{crit.Serialize(surindent)}");
+            serializedContent.AppendLine($"{surindent}amount-{amount.Serialize(surindent)}");
+            serializedContent.AppendLine($"{surindent}specific-{specific.Serialize(surindent)}");
+            return base.Serialize(indent).Replace("__Type__", "Tame").Replace("__Content__", serializedContent.ToString());
+        }
+
+        public override void Deserialize(string serialized)
+        {
+            Dictionary<string, string> dict = ToDict(serialized);
+            crit = Randomizer<string>.InitDeserialize(dict["crit"]);
+            amount = Randomizer<int>.InitDeserialize(dict["amount"]);
+            specific = Randomizer<bool>.InitDeserialize(dict["specific"]);
+        }
+    }
+
     public class BingoTameChallenge : BingoChallenge
     {
         public SettingBox<string> crit;
@@ -19,12 +56,19 @@ namespace BingoMode.BingoChallenges
         public SettingBox<int> amount;
         public SettingBox<bool> specific;
 
+        public BingoTameChallenge()
+        {
+            specific = new(false, "Specific Creature Type", 0);
+            crit = new("", "Creature Type", 1, listName: "friend");
+            amount = new(0, "Amount", 2);
+            tamed = [];
+        }
 
         public override void UpdateDescription()
         {
             this.description = specific.Value ? ChallengeTools.IGT.Translate("Befriend a <crit>")
                 .Replace("<crit>", ChallengeTools.creatureNames[new CreatureTemplate.Type(crit.Value).Index].TrimEnd('s'))
-                : ChallengeTools.IGT.Translate("Befriend [<current>/<amount>] unique creatures")
+                : ChallengeTools.IGT.Translate("Befriend [<current>/<amount>] unique creature types")
                 .Replace("<current>", ValueConverter.ConvertToString(current))
                 .Replace("<amount>", specific.Value ? "1" : ValueConverter.ConvertToString(amount.Value));
             base.UpdateDescription();
@@ -32,16 +76,15 @@ namespace BingoMode.BingoChallenges
 
         public override Phrase ConstructPhrase()
         {
-            if (specific.Value)
-            {
-                return new Phrase([new Icon("FriendB", 1f, Color.white), new Icon(ChallengeUtils.ItemOrCreatureIconName(crit.Value), 1f, ChallengeUtils.ItemOrCreatureIconColor(crit.Value))], []);
-            }
-            return new Phrase([new Icon("FriendB", 1f, Color.white), new Counter(current, amount.Value)], [1]);
+            Phrase phrase = new([[new Icon("FriendB")]]);
+            if (specific.Value) phrase.InsertWord(Icon.FromEntityName(crit.Value));
+            else phrase.InsertWord(new Counter(current, amount.Value), 1);
+            return phrase;
         }
 
         public override bool Duplicable(Challenge challenge)
         {
-            return challenge is not BingoCollectPearlChallenge c || (c.specific.Value == true && specific.Value == true) || c.specific.Value != specific.Value;
+            return challenge is not BingoTameChallenge c || specific.Value != c.specific.Value || (specific.Value && c.specific.Value && crit.Value != c.crit.Value);
         }
 
         public override string ChallengeName()
@@ -103,6 +146,7 @@ namespace BingoMode.BingoChallenges
         {
             base.Reset();
             current = 0;
+            tamed?.Clear();
             tamed = [];
         }
 
@@ -141,13 +185,12 @@ namespace BingoMode.BingoChallenges
                     amount = SettingBoxFromString(array[3]) as SettingBox<int>;
                     completed = (array[4] == "1");
                     revealed = (array[5] == "1");
-                    string[] arr = Regex.Split(array[6], "cLtD");
+                    string[] arr = Regex.Split(array[6], @"cLtD");
                     tamed = [.. arr];
                 }
                 // Legacy board tame challenge compatibility
                 else if (array.Length == 3)
                 {
-                    Plugin.logger.LogInfo("length 3");
                     crit = SettingBoxFromString(array[0]) as SettingBox<string>;
                     completed = (array[1] == "1");
                     revealed = (array[2] == "1");

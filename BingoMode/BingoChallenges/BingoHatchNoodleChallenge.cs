@@ -1,19 +1,58 @@
-﻿using BingoMode.BingoSteamworks;
+﻿using BingoMode.BingoRandomizer;
+using BingoMode.BingoSteamworks;
 using Expedition;
 using Menu.Remix;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace BingoMode.BingoChallenges
 {
     using static ChallengeHooks;
+
+    public class BingoHatchNoodleRandomizer : ChallengeRandomizer
+    {
+        public Randomizer<int> amount;
+        public Randomizer<bool> atOnce;
+
+        public override Challenge Random()
+        {
+            BingoHatchNoodleChallenge challenge = new();
+            challenge.amount.Value = amount.Random();
+            challenge.atOnce.Value = atOnce.Random();
+            return challenge;
+        }
+
+        public override StringBuilder Serialize(string indent)
+        {
+            string surindent = indent + INDENT_INCREMENT;
+            StringBuilder serializedContent = new();
+            serializedContent.AppendLine($"{surindent}amount-{amount.Serialize(surindent)}");
+            serializedContent.AppendLine($"{surindent}atOnce-{atOnce.Serialize(surindent)}");
+            return base.Serialize(indent).Replace("__Type__", "HatchNoodle").Replace("__Content__", serializedContent.ToString());
+        }
+
+        public override void Deserialize(string serialized)
+        {
+            Dictionary<string, string> dict = ToDict(serialized);
+            amount = Randomizer<int>.InitDeserialize(dict["amount"]);
+            atOnce = Randomizer<bool>.InitDeserialize(dict["atOnce"]);
+        }
+    }
+
     public class BingoHatchNoodleChallenge : BingoChallenge
     {
         public SettingBox<int> amount;
         public int current;
         public SettingBox<bool> atOnce;
+
+        public BingoHatchNoodleChallenge()
+        {
+            atOnce = new(false, "At Once", 0);
+            amount = new(0, "Amount", 1);
+        }
 
         public override void UpdateDescription()
         {
@@ -25,10 +64,11 @@ namespace BingoMode.BingoChallenges
 
         public override Phrase ConstructPhrase()
         {
-            Phrase p = new Phrase([new Icon("needleEggSymbol", 1f, ChallengeUtils.ItemOrCreatureIconColor("needleEggSymbol")), new Icon("Kill_SmallNeedleWorm", 1f, ChallengeUtils.ItemOrCreatureIconColor("SmallNeedleWorm"))], [atOnce.Value ? 3 : 2]);
-            if (atOnce.Value) p.words.Add(new Icon("cycle_limit", 1f, UnityEngine.Color.white));
-            p.words.Add(new Counter((atOnce.Value && completed) ? amount.Value : current, amount.Value));
-            return p;
+            Phrase phrase = new(
+                [[new Icon("needleEggSymbol", 1f, ChallengeUtils.ItemOrCreatureIconColor("needleEggSymbol")), new Icon("Kill_SmallNeedleWorm", 1f, ChallengeUtils.ItemOrCreatureIconColor("SmallNeedleWorm"))],
+                [new Counter((atOnce.Value && completed) ? amount.Value : current, amount.Value)]]);
+            if (atOnce.Value) phrase.InsertWord(new Icon("cycle_limit"));
+            return phrase;
         }
 
         public override bool Duplicable(Challenge challenge)
@@ -38,7 +78,7 @@ namespace BingoMode.BingoChallenges
 
         public override string ChallengeName()
         {
-            return ChallengeTools.IGT.Translate("Hatching noodlefly eggs");
+            return ChallengeTools.IGT.Translate("Hatching Noodlefly eggs");
         }
 
         public override Challenge Generate()

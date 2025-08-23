@@ -17,6 +17,7 @@ namespace BingoMode
     using BingoHUD;
     using BingoMenu;
     using BingoSteamworks;
+    using IL.JollyCoop.JollyMenu;
     using Music;
 
     public class BingoHooks
@@ -25,6 +26,8 @@ namespace BingoMode
 
         public static ConditionalWeakTable<ExpeditionMenu, BingoPage> bingoPage = new ();
         public static ConditionalWeakTable<CharacterSelectPage, HoldButton> newBingoButton = new ();
+
+        public static float cantpresscounter;
 
         public static void EarlyApply()
         {
@@ -156,6 +159,7 @@ namespace BingoMode
             //On.Menu.ChallengeSelectPage.Singal += ChallengeSelectPage_Singal;
             On.Menu.CharacterSelectPage.UpdateStats += CharacterSelectPage_UpdateStats;
             On.Menu.CharacterSelectPage.ClearStats += CharacterSelectPage_ClearStats;
+            On.Menu.CharacterSelectPage.Update += CharacterSelectPage_Update;
 
             // Win and lose screens
             IL.WinState.CycleCompleted += WinState_CycleCompleted;
@@ -163,6 +167,7 @@ namespace BingoMode
             // Add Bingo HUD and Stop the base Expedition HUD from appearing
             On.HUD.HUD.InitSinglePlayerHud += HUD_InitSinglePlayerHud;
             On.HUD.HUD.InitSleepHud += HUD_InitSleepHud;
+            On.HUD.HUD.InitFastTravelHud += HUD_InitFastTravelHud;
             //IL.HUD.HUD.InitSinglePlayerHud += HUD_InitSinglePlayerHudIL;
 
             // Ficks
@@ -241,6 +246,11 @@ namespace BingoMode
 
             // Flabberghasted this never got unloaded
             On.Menu.Menu.ShutDownProcess += Menu_ShutDownProcess;
+        }
+
+        private static void HUD_InitFastTravelHud1(On.HUD.HUD.orig_InitFastTravelHud orig, HUD.HUD self, HUD.Map.MapData mapData)
+        {
+            throw new NotImplementedException();
         }
 
         private static void Menu_ShutDownProcess(On.Menu.Menu.orig_ShutDownProcess orig, Menu.Menu self)
@@ -412,7 +422,7 @@ namespace BingoMode
                     if (BingoData.BingoMode)
                     {
                         string ghost = GhostWorldPresence.GetGhostID(self.region.name).value;
-                        if (ExpeditionData.challengeList.Any(x => x is BingoEchoChallenge c && c.ghost.Value.ToUpperInvariant() == ghost.ToUpperInvariant()))
+                        if (ExpeditionData.challengeList.Any(x => x is BingoEchoChallenge))
                         {
                             return false;
                         }
@@ -588,6 +598,7 @@ namespace BingoMode
                 }
                 else if (!SteamFinal.ReceivedHostUpKeep)
                 {
+                    // Would like to pause game here and make button unpause
                     self.room.game.manager.ShowDialog(new InfoDialog(self.room.game.manager, "Trying to reconnect to the host."));
                 }
                 
@@ -623,10 +634,12 @@ namespace BingoMode
 
             if (BingoData.BingoSaves.TryGetValue(ExpeditionData.slugcatPlayer, out var data))
             {
-                // Temp logs for suspected NRE
-                if (self.expPassage == null) Plugin.logger.LogMessage("expPassage is null");
-                if (self.expPassage?.buttonBehav == null) Plugin.logger.LogMessage("buttonBehav is null");
                 self.expPassage.buttonBehav.greyedOut = data.passageUsed;
+            }
+
+            if (self.goalMalnourished)
+            {
+                self.expPassage.buttonBehav.greyedOut = true;
             }
 
             if (self.hud == null || self.hud.parts == null || self.killsDisplay == null) return;
@@ -697,26 +710,6 @@ namespace BingoMode
                 {
                     SteamFinal.BroadcastCurrentBoardState();
                 }
-
-                for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
-                {
-                    if (ExpeditionData.challengeList[j] is BingoHellChallenge hell && hell.TeamsCompleted[SteamTest.team] && !hell.TeamsFailed[SteamTest.team])
-                    {
-                        int newCurrent = 0;
-
-                        foreach (var cha in ExpeditionData.challengeList)
-                        {
-                            if (cha is BingoChallenge ch && !ch.ReverseChallenge() && ch.TeamsCompleted[SteamTest.team]) newCurrent++;
-                        }
-
-                        if (hell.current != newCurrent)
-                        {
-                            hell.current = newCurrent;
-                            hell.UpdateDescription();
-                            hell.ChangeValue();
-                        }
-                    }
-                }
             }
         }
 
@@ -778,9 +771,25 @@ namespace BingoMode
             orig.Invoke(self, trigger);
         }
 
+        private static void CharacterSelectPage_Update(On.Menu.CharacterSelectPage.orig_Update orig, CharacterSelectPage self)
+        {
+            orig.Invoke(self);
+            cantpresscounter = Mathf.Max(0, cantpresscounter - 1);
+            if ((self.menu as ExpeditionMenu).currentPage == 1 && Input.anyKey && Plugin.PluginInstance != null && Input.GetKey(Plugin.PluginInstance.BingoConfig.ResetBind.Value) && cantpresscounter == 0)
+            {
+                if (self.abandonButton != null)
+                {
+                    cantpresscounter = 20;
+                    self.AbandonButton_OnPressDone(self.abandonButton);
+                }
+            }
+        }
+
         private static float ExpeditionMenu_ValueOfSlider(On.Menu.ExpeditionMenu.orig_ValueOfSlider orig, ExpeditionMenu self, Slider slider)
         {
-            if (slider.ID == BingoEnums.MultiplayerSlider && bingoPage.TryGetValue(self, out var page))
+            if ((slider.ID == BingoEnums.MultiplayerSlider ||
+                    slider.ID == BingoEnums.RandomizerSlider) &&
+                    bingoPage.TryGetValue(self, out var page))
             {
                 return page.ValueOfSlider(slider);
             }
@@ -792,7 +801,9 @@ namespace BingoMode
         {
             orig.Invoke(self, slider, f);
 
-            if (slider.ID == BingoEnums.MultiplayerSlider && bingoPage.TryGetValue(self, out var page))
+            if ((slider.ID == BingoEnums.MultiplayerSlider ||
+                    slider.ID == BingoEnums.RandomizerSlider) &&
+                    bingoPage.TryGetValue(self, out var page))
             {
                 page.SliderSetValue(slider, f);
             }
@@ -833,7 +844,7 @@ namespace BingoMode
         {
             orig.Invoke(self);
 
-            if (bingoPage.TryGetValue(self.owner.menu as ExpeditionMenu, out var pag) && pag.unlocksButton.greyedOut)
+            if (bingoPage.TryGetValue(self.owner.menu as ExpeditionMenu, out var pag))
             {
                 self.pageTitle.x = pag.pos.x + 685f;
                 self.pageTitle.y = pag.pos.y + 680f;
@@ -847,10 +858,7 @@ namespace BingoMode
             if (message == "CLOSE")
             {
                 if (bingoPage.TryGetValue(self.owner.menu as ExpeditionMenu, out var pag))
-                {
-                    pag.unlocksButton.greyedOut = false;
-                    pag.unlocksButton.Reset();
-                }
+                    pag.UnlocksDialogClose();
 
                 if (!BingoData.MultiplayerGame || SteamMatchmaking.GetLobbyOwner(SteamTest.CurrentLobby) != SteamTest.selfIdentity.GetSteamID()) return;
                 if (BingoData.globalSettings.perks == LobbySettings.AllowUnlocks.Inherited)
@@ -923,6 +931,15 @@ namespace BingoMode
         private static void HUD_InitSleepHud(On.HUD.HUD.orig_InitSleepHud orig, HUD.HUD self, SleepAndDeathScreen sleepAndDeathScreen, HUD.Map.MapData mapData, SlugcatStats charStats)
         {
             orig.Invoke(self, sleepAndDeathScreen, mapData, charStats);
+            if (BingoData.BingoMode && GlobalBoard != null && GlobalBoard.challengeGrid != null)
+            {
+                self.AddPart(new BingoHUDMain(self));
+            }
+        }
+
+        private static void HUD_InitFastTravelHud(On.HUD.HUD.orig_InitFastTravelHud orig, HUD.HUD self, HUD.Map.MapData mapData)
+        {
+            orig.Invoke(self, mapData);
             if (BingoData.BingoMode && GlobalBoard != null && GlobalBoard.challengeGrid != null)
             {
                 self.AddPart(new BingoHUDMain(self));
@@ -1051,13 +1068,12 @@ namespace BingoMode
             GlobalBoard.size = size;
             GlobalBoard.challengeGrid = new Challenge[size, size];
             int chIndex = 0;
-            for (int i = 0; i < size; i++)
+            for (int j = 0; j < size; j++)
             {
-                for (int j = 0; j < size; j++)
+                for (int i = 0; i < size; i++)
                 {
-                    GlobalBoard.challengeGrid[i, j] = ExpeditionData.challengeList[chIndex];
+                    GlobalBoard.challengeGrid[i, j] = ExpeditionData.challengeList[chIndex++];
                     //ExpeditionData.challengeList.Add(GlobalBoard.challengeGrid[i, j]);
-                    chIndex++;
                 }
             }
             SteamTest.team = BingoData.BingoSaves[ExpeditionData.slugcatPlayer].team;
@@ -1075,7 +1091,7 @@ namespace BingoMode
             {
                 if (bingoPage.TryGetValue(self, out var page))
                 {
-                    self.selectedObject = page.randomize;
+                    self.selectedObject = page.grid;
                 }
                 else self.selectedObject = self.characterSelect.slugcatButtons[0];
             }
