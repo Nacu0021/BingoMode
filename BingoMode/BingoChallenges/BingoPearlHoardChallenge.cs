@@ -74,14 +74,14 @@ namespace BingoMode.BingoChallenges
 
         public override void UpdateDescription()
         {
-            string location = region.Value != "Any Region" ? Region.GetRegionFullName(region.Value, ExpeditionData.slugcatPlayer) : "";
+            string location = region.Value != "Any Region" ? ChallengeTools.IGT.Translate(Region.GetRegionFullName(region.Value, ExpeditionData.slugcatPlayer)) : "";
             this.description = ChallengeTools.IGT.Translate("<action> [<current>/<amount>] <target_item> <shelter_type> shelter <location>")
-                .Replace("<action>", anyShelter.Value ? "Bring" : "Hoard")
+                .Replace("<action>", anyShelter.Value ? ChallengeTools.IGT.Translate("Bring") : ChallengeTools.IGT.Translate("Hoard"))
                 .Replace("<current>", ValueConverter.ConvertToString(current))
                 .Replace("<amount>", ValueConverter.ConvertToString<int>(this.amount.Value))
                 .Replace("<target_item>", common.Value ? ChallengeTools.IGT.Translate("common pearls") : ChallengeTools.IGT.Translate("colored pearls"))
-                .Replace("<shelter_type>", anyShelter.Value ? "to any" : "in the same")
-                .Replace("<location>", location != "" ? "in " + location : "");
+                .Replace("<shelter_type>", anyShelter.Value ? ChallengeTools.IGT.Translate("to any") : ChallengeTools.IGT.Translate("in the same"))
+                .Replace("<location>", location != "" ? ChallengeTools.IGT.Translate("in ") + location : "");
             base.UpdateDescription();
         }
 
@@ -192,7 +192,7 @@ namespace BingoMode.BingoChallenges
                         }
                         else
                         {
-                            if (isMisc)
+                            if (common.Value && isMisc)
                             {
                                 num++;
                                 if (num >= amount.Value)
@@ -203,7 +203,7 @@ namespace BingoMode.BingoChallenges
                                     return;
                                 }
                             }
-                            else if (isColored)
+                            else if (!common.Value && isColored)
                             {
                                 num2++;
                                 if (num2 >= amount.Value)

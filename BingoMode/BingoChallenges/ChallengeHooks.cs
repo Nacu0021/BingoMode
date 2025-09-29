@@ -396,7 +396,7 @@ namespace BingoMode.BingoChallenges
                 x => x.MatchLdfld<AbstractSpear>("needle")
                 ))
             {
-                c.Emit(OpCodes.Ldloc, 10);
+                c.Emit(OpCodes.Ldloc, 12);
                 c.EmitDelegate<Func<bool, AbstractSpear, bool>>((orig, spear) =>
                 {
                     if (ExpeditionData.challengeList.Any(x => x is BingoTradeTradedChallenge c && c.traderItems.Keys.Count > 0 && c.traderItems.Keys.Contains(spear.ID)))
@@ -554,7 +554,8 @@ namespace BingoMode.BingoChallenges
                 ))
             {
                 b.Emit(OpCodes.Ldarg_0);
-                b.Emit(OpCodes.Ldloc, 140);
+                // Hate. Let me tell you how much I've come to HATE this local index since I've been born
+                b.Emit(OpCodes.Ldloc, 138);
                 b.EmitDelegate<Action<Room, WorldCoordinate>>((room, pos) =>
                 {
                     AbstractWorldEntity existingFucker = room.abstractRoom.entities.FirstOrDefault(x => x is AbstractPhysicalObject o && o.type == MSCItemType.EnergyCell);
@@ -1180,12 +1181,20 @@ namespace BingoMode.BingoChallenges
             if (c.TryGotoNext(
                 x => x.MatchCallOrCallvirt<RainWorld>("get_ExpeditionMode")
                 ) && c.TryGotoNext(
-                x => x.MatchCallOrCallvirt<SLOrcacleState>("set_neuronsLeft")   
+                x => x.MatchCallOrCallvirt<SLOrcacleState>("set_neuronsLeft")
                 ))
             {
                 c.Emit(OpCodes.Ldarg_0);
                 c.EmitDelegate<Func<int, SaveState, int>>((orig, self) =>
                 {
+                    for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+                    {
+                        if (ExpeditionData.challengeList[j] is BingoGreenNeuronChallenge c && c.moon.Value && c.CompletedByAny())
+                        {
+                            // MoonDead is not really necessary but it's a good piece of information to expose
+                            BingoData.MoonDead = false;
+                        }
+                    }
                     if (BingoData.MoonDead) orig = 0;
 
                     return orig;
@@ -1537,7 +1546,7 @@ namespace BingoMode.BingoChallenges
                 ))
             {
                 c.Emit(OpCodes.Ldarg_0);
-                c.Emit(OpCodes.Ldloc, 27);
+                c.Emit(OpCodes.Ldloc, 30);
                 c.EmitDelegate<Func<bool, Room, int, bool>>((orig, self, i) =>
                 {
                     if (self.roomSettings.placedObjects[i].data is CollectToken.CollectTokenData c && BingoData.challengeTokens.Contains(c.tokenString + (c.isRed ? "-safari" : ""))) orig = false;
@@ -1558,7 +1567,7 @@ namespace BingoMode.BingoChallenges
                 ))
             {
                 b.Emit(OpCodes.Ldarg_0);
-                b.Emit(OpCodes.Ldloc, 140);
+                b.Emit(OpCodes.Ldloc, 138);
                 b.EmitDelegate<Action<Room, WorldCoordinate>>((room, pos) =>
                 {
                     AbstractWorldEntity existingFucker = room.abstractRoom.entities.FirstOrDefault(x => x is AbstractPhysicalObject o && o.type == ItemType.NSHSwarmer);
@@ -1609,7 +1618,7 @@ namespace BingoMode.BingoChallenges
                 ))
             {
                 b.Emit(OpCodes.Ldarg_0);
-                b.Emit(OpCodes.Ldloc, 140);
+                b.Emit(OpCodes.Ldloc, 138);
                 b.EmitDelegate<Action<Room, WorldCoordinate>>((room, pos) =>
                 {
                     AbstractWorldEntity existingFucker = room.abstractRoom.entities.FirstOrDefault(x => x is AbstractPhysicalObject o && o.type == MSCItemType.HalcyonPearl);
@@ -1719,7 +1728,7 @@ namespace BingoMode.BingoChallenges
                 ))
             {
                 b.Emit(OpCodes.Ldarg_0);
-                b.Emit(OpCodes.Ldloc, 140);
+                b.Emit(OpCodes.Ldloc, 138);
                 b.EmitDelegate<Action<Room, WorldCoordinate>>((room, pos) =>
                 {
                     AbstractWorldEntity existingFucker = room.abstractRoom.entities.FirstOrDefault(x => x is AbstractPhysicalObject o && o.type == MSCItemType.MoonCloak);

@@ -143,7 +143,7 @@ namespace BingoMode.BingoMenu
             multiplayerButton = new SimpleButton(
                     menu,
                     this,
-                    "Multiplayer",
+                    expMenu.Translate("Multiplayer"),
                     "SWITCH_MULTIPLAYER",
                     expMenu.exitButton.pos + new Vector2(0f, -40f),
                     new Vector2(140f, 30f));
@@ -154,7 +154,7 @@ namespace BingoMode.BingoMenu
             randomizerButton = new(
                     menu,
                     this,
-                    "Profiles",
+                    expMenu.Translate("Profiles"),
                     "SWITCH_RANDOMIZATION",
                     expMenu.manualButton.pos + new Vector2(0, -40f), expMenu.manualButton.size);
             subObjects.Add(randomizerButton);
@@ -201,7 +201,7 @@ namespace BingoMode.BingoMenu
                 gameControls.HostPrivilege = create;
                 boardControls.HostPrivilege = create;
                 expMenu.manualButton.buttonBehav.greyedOut = true;
-                multiplayerButton.menuLabel.text = "Leave Lobby";
+                multiplayerButton.menuLabel.text = expMenu.Translate("Leave Lobby");
                 multiplayerButton.signalText = "LEAVE_LOBBY";
                 grid.Switch(!create);
                 return;
@@ -215,7 +215,7 @@ namespace BingoMode.BingoMenu
             gameControls.HostPrivilege = true;
             boardControls.HostPrivilege = true;
             expMenu.manualButton.buttonBehav.greyedOut = false;
-            multiplayerButton.menuLabel.text = "Multiplayer";
+            multiplayerButton.menuLabel.text = expMenu.Translate("Multiplayer");
             multiplayerButton.signalText = "SWITCH_MULTIPLAYER";
             grid.Switch(false);
         }

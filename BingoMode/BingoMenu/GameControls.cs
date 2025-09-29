@@ -100,7 +100,7 @@ namespace BingoMode.BingoMenu
                 minusButton.buttonBehav.greyedOut = !value;
                 pasteBoard.buttonBehav.greyedOut = !value;
                 startGame.signalText = value ? "STARTBINGO" : "GETREADY";
-                startGame.menuLabel.text = value ? "BEGIN" : "I'M\nREADY";
+                startGame.menuLabel.text = value ? menu.Translate("BEGIN") : menu.Translate("I'M<LINE>READY").Replace("<LINE>", "\r\n");
             }
         }
         private bool _allReady = true;
@@ -128,7 +128,7 @@ namespace BingoMode.BingoMenu
             nallReady = new(
                     menu,
                     this,
-                    "Not all players are ready !",
+                    menu.Translate("Not all players are ready !"),
                     new(WIDTH / 2f, NALL_READY_Y),
                     Vector2.zero,
                     false);
@@ -138,7 +138,7 @@ namespace BingoMode.BingoMenu
             startGame = new(
                     menu,
                     this,
-                    "BEGIN",
+                    menu.Translate("BEGIN"),
                     "STARTBINGO",
                     offset + new Vector2(WIDTH / 2f, START_Y + HOLD_BUTTON_RADIUS),
                     ALL_READY_FILL_TIME);
@@ -147,7 +147,7 @@ namespace BingoMode.BingoMenu
             shelterLabel = new MenuLabel(
                     menu,
                     this,
-                    "Shelter: ",
+                    menu.Translate("Shelter: "),
                     offset + new Vector2(RESIZE_BUTTON_SIZE + MARGIN, SHELTER_Y + TEXTBOX_HEIGHT / 2f),
                     Vector2.zero,
                     false);
@@ -161,7 +161,7 @@ namespace BingoMode.BingoMenu
                     UNLOCKS_BUTTON_WIDTH - shelterLabel.label.textRect.width)
             {
                 alignment = FLabelAlignment.Center,
-                description = "The shelter players start in. Please type in a valid shelter's room name (CASE SENSITIVE), or 'random'",
+                description = menu.Translate("The shelter players start in. Please type in a valid shelter's room name (CASE SENSITIVE), or 'random'"),
                 maxLength = 100,
             };
             shelterSetting.OnValueUpdate += ShelterSetting_OnValueUpdate;
@@ -201,7 +201,7 @@ namespace BingoMode.BingoMenu
             copyBoard = new(
                     menu,
                     this,
-                    "Copy board",
+                    menu.Translate("Copy board"),
                     "COPYTOCLIPBOARD",
                     offset + new Vector2((WIDTH - MARGIN) / 2f - COPY_PASTE_WDITH, COPY_PASTE_Y),
                     new Vector2(COPY_PASTE_WDITH, COPY_PASTE_HEIGHT));
@@ -210,7 +210,7 @@ namespace BingoMode.BingoMenu
             pasteBoard = new(
                     menu,
                     this,
-                    "Paste board",
+                    menu.Translate("Paste board"),
                     "PASTEFROMCLIPBOARD",
                     offset + new Vector2((WIDTH + MARGIN) / 2f, COPY_PASTE_Y),
                     new Vector2(COPY_PASTE_WDITH, COPY_PASTE_HEIGHT));
@@ -224,7 +224,7 @@ namespace BingoMode.BingoMenu
             {
                 SteamMatchmaking.SetLobbyMemberData(SteamTest.CurrentLobby, "ready", "1");
                 startGame.signalText = "GETUNREADY";
-                startGame.menuLabel.text = "I'M NOT\nREADY";
+                startGame.menuLabel.text = menu.Translate("I'M NOT<LINE>READY").Replace("<LINE>", "\r\n");
                 menu.PlaySound(SoundID.MENU_Start_New_Game);
             }
 
@@ -232,7 +232,7 @@ namespace BingoMode.BingoMenu
             {
                 SteamMatchmaking.SetLobbyMemberData(SteamTest.CurrentLobby, "ready", "0");
                 startGame.signalText = "GETREADY";
-                startGame.menuLabel.text = "I'M\nREADY";
+                startGame.menuLabel.text = menu.Translate("I'M<LINE>READY").Replace("<LINE>", "\r\n");
                 menu.PlaySound(SoundID.MENU_Start_New_Game);
             }
 
