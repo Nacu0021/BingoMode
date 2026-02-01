@@ -70,7 +70,10 @@ namespace BingoMode.BingoChallenges
 
         public override void UpdateDescription()
         {
-            region = pearl.Value.Substring(0, 2);
+            region = Regex.Split(pearl.Value, "_")[0];
+            if (ExpeditionData.slugcatPlayer == MoreSlugcatsEnums.SlugcatStatsName.Saint && region == "DS") region = "UG";
+            if ((ExpeditionData.slugcatPlayer == MoreSlugcatsEnums.SlugcatStatsName.Spear || ExpeditionData.slugcatPlayer == MoreSlugcatsEnums.SlugcatStatsName.Artificer) && region == "MS") region = "GW";
+
             this.description = specific.Value ? ChallengeTools.IGT.Translate("Collect the <pearl> pearl from <region>")
                 .Replace("<region>", ChallengeTools.IGT.Translate(Region.GetRegionFullName(region, ExpeditionData.slugcatPlayer)))
                 .Replace("<pearl>", ChallengeTools.IGT.Translate(ChallengeUtils.NameForPearl(pearl.Value)))
@@ -85,8 +88,8 @@ namespace BingoMode.BingoChallenges
             if (specific.Value)
             {
                 return new Phrase(
-                    [[new Verse(pearl.Value)],
-                    [new Icon("Symbol_Pearl", 1f, DataPearl.UniquePearlMainColor(new(pearl.Value, false))) { background = new FSprite("radialgradient") }]]);
+                    [[new Verse(region.Length == 4 ? pearl.Value.Substring(pearl.Value.LastIndexOf('_') + 1) : pearl.Value)],
+                    [new Icon("Symbol_Pearl", 1f, DataPearl.UniquePearlMainColor(new(region.Length == 4 ? pearl.Value.Substring(5) : pearl.Value, false))) { background = new FSprite("radialgradient") }]]);
             }
             return new Phrase(
                 [[Icon.PEARL_HOARD_COLOR],
@@ -108,7 +111,7 @@ namespace BingoMode.BingoChallenges
             if (completed || revealed || TeamsCompleted[SteamTest.team] || hidden) return;
             if (specific.Value)
             {
-                if (type.value != pearl.Value) return;
+                if (type.value != (region.Length == 4 ? pearl.Value.Substring(pearl.Value.IndexOf('_') + 1) : pearl.Value)) return;
                 current = 1;
                 UpdateDescription();
                 CompleteChallenge();
@@ -149,21 +152,14 @@ namespace BingoMode.BingoChallenges
         public override Challenge Generate()
         {
             bool specifi = UnityEngine.Random.value < 0.5f;
-            List<string> fromList = ChallengeUtils.CollectablePearls.ToList();
-            if (ExpeditionData.slugcatPlayer == MoreSlugcatsEnums.SlugcatStatsName.Artificer || ExpeditionData.slugcatPlayer == MoreSlugcatsEnums.SlugcatStatsName.Spear)
-            {
-                fromList.Remove("SL_chimney");
-                fromList.Remove("SL_bridge");
-                fromList.Remove("SL_moon");
-            }
-            string p = fromList[UnityEngine.Random.Range(0, fromList.Count - (ModManager.MSC ? 6 : 10))];
+            string p = ChallengeUtils.GetCorrectListForChallenge("pearls")[UnityEngine.Random.Range(0, ChallengeUtils.GetCorrectListForChallenge("pearls").Length)];
             BingoCollectPearlChallenge chal = new()
             {
                 specific = new SettingBox<bool>(specifi, "Specific Pearl", 0),
                 collected = []
             };
             chal.pearl = new(p, "Pearl", 1, listName: "pearls");
-            chal.region = p.Substring(0, 2);
+            chal.region = Regex.Split(p, "_")[0];
             chal.amount = new(UnityEngine.Random.Range(2, 7), "Amount", 3);
 
             return chal;
@@ -221,7 +217,7 @@ namespace BingoMode.BingoChallenges
                 string[] array = Regex.Split(args, "><");
                 specific = SettingBoxFromString(array[0]) as SettingBox<bool>;
                 pearl = SettingBoxFromString(array[1]) as SettingBox<string>;
-                region = pearl == null ? "noregion" : pearl.Value.Substring(0, 2);
+                region = pearl == null ? "noregion" : Regex.Split(pearl.Value, "_")[0];
                 current = int.Parse(array[2], NumberStyles.Any, CultureInfo.InvariantCulture);
                 amount = SettingBoxFromString(array[3]) as SettingBox<int>;
                 completed = (array[4] == "1");

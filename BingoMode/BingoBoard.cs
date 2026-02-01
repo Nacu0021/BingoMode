@@ -46,20 +46,28 @@ namespace BingoMode
                 ghostGrid = challengeGrid;
 
             challengeGrid = new Challenge[size, size];
-            for (int j = 0; j < size; j++)
+
+            if (UnityEngine.Random.value < 0.0005 && ExpeditionData.slugcatPlayer == SlugcatStats.Name.Red)
             {
-                for (int i = 0; i < size; i++)
+                BingoHooks.GlobalBoard.FromString(BingoData.normalBingoBoard);
+            }
+            else
+            {
+                for (int j = 0; j < size; j++)
                 {
-                    if (changeSize && !(i + 1 > ghostGrid.GetLength(0) || j + 1 > ghostGrid.GetLength(1)) && ghostGrid[i, j] != null)
+                    for (int i = 0; i < size; i++)
                     {
-                        challengeGrid[i, j] = ghostGrid[i, j];
-                        if (!ExpeditionData.challengeList.Contains(challengeGrid[i, j]))
-                            ExpeditionData.challengeList.Add(challengeGrid[i, j]);
-                        continue;
+                        if (changeSize && !(i + 1 > ghostGrid.GetLength(0) || j + 1 > ghostGrid.GetLength(1)) && ghostGrid[i, j] != null)
+                        {
+                            challengeGrid[i, j] = ghostGrid[i, j];
+                            if (!ExpeditionData.challengeList.Contains(challengeGrid[i, j]))
+                                ExpeditionData.challengeList.Add(challengeGrid[i, j]);
+                            continue;
+                        }
+                        if (challengeGrid[i, j] != null)
+                            continue;
+                        challengeGrid[i, j] = RandomBingoChallenge(x: i, y: j);
                     }
-                    if (challengeGrid[i, j] != null)
-                        continue;
-                    challengeGrid[i, j] = RandomBingoChallenge(x: i, y: j);
                 }
             }
             SteamTest.UpdateOnlineBingo();
@@ -461,6 +469,9 @@ namespace BingoMode
 
             List<Challenge> list = [];
             list.AddRange(BingoData.GetAdequateChallengeList(ExpeditionData.slugcatPlayer));
+
+            if (!BingoData.bannedChallenges.ContainsKey(ExpeditionData.slugcatPlayer)) BingoData.LoadAllBannedChallengeLists(ExpeditionData.slugcatPlayer);
+
             list.RemoveAll(x => (type == null || x.GetType() != type.GetType()) && BingoData.bannedChallenges[ExpeditionData.slugcatPlayer].Contains(x.GetType().Name));
             if (type != null) list.RemoveAll(x => x.GetType() != type.GetType());
             int tries = 0;
@@ -577,16 +588,16 @@ namespace BingoMode
 
         public override string ToString()
         {
-            string text = ExpeditionData.slugcatPlayer.value + ";" + string.Join("bChG", ExpeditionData.challengeList);
+            string text = ExpeditionData.slugcatPlayer.value + ";" + BingoData.BingoDen + ";" + string.Join("bChG", ExpeditionData.challengeList);
             return text;
         }
         
-        public void FromString(string text)
+        public bool FromString(string text)
         {
-            if (string.IsNullOrEmpty(text) || !text.Contains("bChG") || !text.Contains(';')) return;
+            bool success = true;
+            if (string.IsNullOrEmpty(text) || !text.Contains("bChG") || !text.Contains(';')) { success = false; return success; }
             string slug = text.Substring(0, text.IndexOf(';'));
             text = text.Substring(text.IndexOf(";") + 1);
-            
             if (slug.ToLowerInvariant() != ExpeditionData.slugcatPlayer.value.ToLowerInvariant())
             {
                 if (BingoData.globalMenu != null)
@@ -596,7 +607,20 @@ namespace BingoMode
                             BingoData.globalMenu.Translate($"Selected slugcat: {ExpeditionData.slugcatPlayer.value}<LINE>").Replace("<LINE>", "\r\n") +
                             BingoData.globalMenu.Translate($"Provided Slugcat: {slug}<LINE><LINE>").Replace("<LINE>", "\r\n") +
                             BingoData.globalMenu.Translate($"Please paste a board from the same slugcat that's currently selected.")));
-                return;
+                success = false;
+                return success;
+            }
+
+            string shelter = "random";
+            if (text.IndexOf(';') >= 0)
+            {
+                shelter = text.Substring(0, text.IndexOf(';'));
+                text = text.Substring(text.IndexOf(";") + 1);
+            }
+            ExpeditionMenu self = BingoData.globalMenu;
+            if (self != null && BingoHooks.bingoPage.TryGetValue(self, out var page))
+            {
+                page.Shelter = shelter;
             }
 
             string last = ToString();
@@ -628,16 +652,31 @@ namespace BingoMode
                         }
                         catch (Exception ex)
                         {
-                            Plugin.logger.LogError("ERROR: Problem recreating challenge \"" + challenges[next] + "\" with reflection in bingoboard.fromstring: " + ex.Message);
+                            Plugin.logger.LogError("Problem recreating challenge \"" + challenges[next] + "\" in bingoboard.fromstring: " + ex.Message);
+
+                            // Eat 999999 levis
+                            string[] eatLevi = Regex.Split("BingoEatChallenge~System.Int32|999999|Amount|3|NULL><0><1><System.String|BigEel|Food type|0|food><System.Boolean|false|While Starving|2|NULL><0><0", "~");
+                            string type = eatLevi[0];
+                            string details = eatLevi[1];
+                            Challenge fill = (Challenge)Activator.CreateInstance(BingoData.availableBingoChallenges.Find((Challenge c) => c.GetType().Name == type).GetType());
+                            fill.FromString(details);
+
+                            challengeGrid[i, j] = fill;
+                            ExpeditionData.challengeList.Add(fill);
+                            success = false;
+                            Plugin.logger.LogInfo("Replacing with: " + challengeGrid[i, j]);
                         }
                         next++;
                     }
                 }
                 UpdateChallenges();
+                return success;
             }
             catch
             {
+                success = false;
                 FromString(last);
+                return success;
             }
         }
 

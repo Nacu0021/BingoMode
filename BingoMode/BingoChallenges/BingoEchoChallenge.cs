@@ -85,7 +85,7 @@ namespace BingoMode.BingoChallenges
         public override Phrase ConstructPhrase()
         {
             Phrase phrase = new([[new Icon("echo_icon"), specific.Value ? new Verse(ghost.Value) : new Counter(current, amount.Value)]]);
-            if (starve.Value) phrase.InsertWord(new Icon("Multiplayer_Death"), 1);
+            if (starve.Value) phrase.InsertWord(new Icon("MartyrB"), 1);
             return phrase;
         }
 
@@ -136,18 +136,10 @@ namespace BingoMode.BingoChallenges
 
         public override Challenge Generate()
         {
-            List<string> list = [];
-            for (int i = 0; i < ExtEnum<GhostWorldPresence.GhostID>.values.entries.Count; i++)
-            {
-                if (ExtEnum<GhostWorldPresence.GhostID>.values.entries[i] != "NoGhost" && (!ModManager.MSC || !(ExtEnum<GhostWorldPresence.GhostID>.values.entries[i] == "MS")) && (!ModManager.MSC || !(ExtEnum<GhostWorldPresence.GhostID>.values.entries[i] == "SL") || !(ExpeditionData.slugcatPlayer != MoreSlugcatsEnums.SlugcatStatsName.Saint)) && ChallengeUtils.GetSortedCorrectListForChallenge("regionsreal").Contains(ExtEnum<GhostWorldPresence.GhostID>.values.entries[i]))
-                {
-                    list.Add(ExtEnum<GhostWorldPresence.GhostID>.values.entries[i]);
-                }
-            }
             return new BingoEchoChallenge
             {
                 specific = new SettingBox<bool>(Random.value < 0.5f, "Specific Echo", 0),
-                ghost = new(list[Random.Range(0, list.Count)], "Region", 1, listName: "echoes"),
+                ghost = new(ChallengeUtils.GetCorrectListForChallenge("echoes")[Random.Range(0, ChallengeUtils.GetCorrectListForChallenge("echoes").Length)], "Region", 1, listName: "echoes"),
                 amount = new(Random.Range(2, 7), "Amount", 2),
                 starve = new(Random.value < 0.1f, "While Starving", 3)
             };
@@ -207,29 +199,14 @@ namespace BingoMode.BingoChallenges
             try
             {
                 string[] array = Regex.Split(args, "><");
-                if (array.Length == 8)
-                {
-                    specific = SettingBoxFromString(array[0]) as SettingBox<bool>;
-                    ghost = SettingBoxFromString(array[1]) as SettingBox<string>;
-                    starve = SettingBoxFromString(array[2]) as SettingBox<bool>;
-                    current = int.Parse(array[3], NumberStyles.Any, CultureInfo.InvariantCulture);
-                    amount = SettingBoxFromString(array[4]) as SettingBox<int>;
-                    completed = (array[5] == "1");
-                    revealed = (array[6] == "1");
-                    visited = [.. array[7].Split('|')];
-                }
-                // Legacy board echo challenge compatibility
-                else if (array.Length == 4)
-                {
-                    ghost = SettingBoxFromString(array[0]) as SettingBox<string>;
-                    starve = SettingBoxFromString(array[1]) as SettingBox<bool>;
-                    completed = (array[2] == "1");
-                    revealed = (array[3] == "1");
-                    specific = SettingBoxFromString("System.Boolean|true|Specific Echo|0|NULL") as SettingBox<bool>;
-                    current = 0;
-                    amount = SettingBoxFromString("System.Int32|2|Amount|1|NULL") as SettingBox<int>;
-                    visited = [];
-                }
+                specific = SettingBoxFromString(array[0]) as SettingBox<bool>;
+                ghost = SettingBoxFromString(array[1]) as SettingBox<string>;
+                starve = SettingBoxFromString(array[2]) as SettingBox<bool>;
+                current = int.Parse(array[3], NumberStyles.Any, CultureInfo.InvariantCulture);
+                amount = SettingBoxFromString(array[4]) as SettingBox<int>;
+                completed = (array[5] == "1");
+                revealed = (array[6] == "1");
+                visited = [.. array[7].Split('|')];
                 UpdateDescription();
             }
             catch (System.Exception ex)

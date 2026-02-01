@@ -87,8 +87,8 @@ namespace BingoMode.BingoChallenges
         public override Phrase ConstructPhrase()
         {
             Phrase phrase = anyShelter.Value ?
-                new Phrase([[Icon.FromEntityName(target.Value), new Icon("singlearrow"), new Icon("doubleshelter")]]):
-                new Phrase([[new Icon("ShelterMarker"), Icon.FromEntityName(target.Value)]]);
+                new Phrase([[target.Value == "KarmaFlower" ? Icon.KARMA_FLOWER : Icon.FromEntityName(target.Value), new Icon(Plugin.PluginInstance.BingoConfig.FillIcons.Value ? "keyShiftB" : "keyShiftA", 1f, Color.white, 90), new Icon("doubleshelter")]]):
+                new Phrase([[new Icon("ShelterMarker"), target.Value == "KarmaFlower" ? Icon.KARMA_FLOWER : Icon.FromEntityName(target.Value)]]);
             int lastLine = 1;
             if (region.Value != "Any Region")
             {
@@ -119,19 +119,10 @@ namespace BingoMode.BingoChallenges
 
         public override Challenge Generate()
         {
-            List<string> liste = [.. ChallengeUtils.GetSortedCorrectListForChallenge("expobject")];
-            if (ModManager.MSC && ExpeditionData.slugcatPlayer == MoreSlugcatsEnums.SlugcatStatsName.Artificer || ExpeditionData.slugcatPlayer == MoreSlugcatsEnums.SlugcatStatsName.Spear)
-            {
-                liste.Remove("BubbleGrass");
-            }
-            if (ModManager.MSC && ExpeditionData.slugcatPlayer == MoreSlugcatsEnums.SlugcatStatsName.Saint)
-            {
-                liste.Remove("LillyPuck");
-            }
             return new BingoItemHoardChallenge
             {
                 amount = new((int)Mathf.Lerp(2f, 8f, UnityEngine.Random.value), "Amount", 0),
-                target = new(liste[UnityEngine.Random.Range(0, liste.Count)], "Item", 1, listName: "expobject"),
+                target = new(ChallengeUtils.GetCorrectListForChallenge("expobject")[UnityEngine.Random.Range(0, ChallengeUtils.GetCorrectListForChallenge("expobject").Length)], "Item", 1, listName: "expobject"),
                 anyShelter = new(UnityEngine.Random.value < 0.5f, "Any Shelter", 2),
                 region = new("Any Region", "Region", 4, listName: "regions"),
             };
@@ -252,42 +243,15 @@ namespace BingoMode.BingoChallenges
             try
             {
                 string[] array = Regex.Split(args, "><");
-                if (array.Length == 8)
-                {
-                    anyShelter = SettingBoxFromString(array[0]) as SettingBox<bool>;
-                    current = int.Parse(array[1], NumberStyles.Any, CultureInfo.InvariantCulture);
-                    amount = SettingBoxFromString(array[2]) as SettingBox<int>;
-                    target = SettingBoxFromString(array[3]) as SettingBox<string>;
-                    region = SettingBoxFromString(array[4]) as SettingBox<string>;
-                    completed = (array[5] == "1");
-                    revealed = (array[6] == "1");
-                    string[] arr = Regex.Split(array[7], "cLtD");
+                anyShelter = SettingBoxFromString(array[0]) as SettingBox<bool>;
+                current = int.Parse(array[1], NumberStyles.Any, CultureInfo.InvariantCulture);
+                amount = SettingBoxFromString(array[2]) as SettingBox<int>;
+                target = SettingBoxFromString(array[3]) as SettingBox<string>;
+                region = SettingBoxFromString(array[4]) as SettingBox<string>;
+                completed = (array[5] == "1");
+                revealed = (array[6] == "1");
+                string[] arr = Regex.Split(array[7], "cLtD");
                     collected = [.. arr];
-                }
-                // Legacy board hoard challenge compatibility
-                else if (array.Length == 7)
-                {
-                    anyShelter = SettingBoxFromString(array[0]) as SettingBox<bool>;
-                    current = int.Parse(array[1], NumberStyles.Any, CultureInfo.InvariantCulture);
-                    amount = SettingBoxFromString(array[2]) as SettingBox<int>;
-                    target = SettingBoxFromString(array[3]) as SettingBox<string>;
-                    completed = (array[4] == "1");
-                    revealed = (array[5] == "1");
-                    string[] arr = Regex.Split(array[6], "cLtD");
-                    region = SettingBoxFromString("System.String|Any Region|Region|3|regions") as SettingBox<string>;
-                    collected = [.. arr];
-                }
-                else if (array.Length == 4)
-                {
-                    amount = SettingBoxFromString(array[0]) as SettingBox<int>;
-                    target = SettingBoxFromString(array[1]) as SettingBox<string>;
-                    completed = (array[2] == "1");
-                    revealed = (array[3] == "1");
-                    anyShelter = SettingBoxFromString("System.Boolean|false|Any Shelter|2|NULL") as SettingBox<bool>;
-                    current = 0;
-                    collected = [];
-                    region = SettingBoxFromString("System.String|Any Region|Region|3|regions") as SettingBox<string>;
-                }
                 UpdateDescription();
             }
             catch (Exception ex)

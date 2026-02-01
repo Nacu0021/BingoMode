@@ -55,7 +55,7 @@ namespace BingoMode.BingoChallenges
 
         public override Phrase ConstructPhrase()
         {
-            return new Phrase([[new Icon("buttonCrossA", 1f, Color.red), new Verse(region.Value)]]);
+            return new Phrase([[new Icon(Plugin.PluginInstance.BingoConfig.FillIcons.Value ? "buttonCrossB" : "buttonCrossA", 1f, Color.red), new Verse(region.Value)]]);
         }
 
         public override bool Duplicable(Challenge challenge)
@@ -70,7 +70,7 @@ namespace BingoMode.BingoChallenges
 
         public override Challenge Generate()
         {
-            string[] regiones = SlugcatStats.SlugcatStoryRegions(ExpeditionData.slugcatPlayer).Where(x => x.ToLowerInvariant() != "hr").ToArray();
+            string[] regiones = ChallengeUtils.GetCorrectListForChallenge("regionsreal", true);
 
             BingoNoRegionChallenge ch = new BingoNoRegionChallenge
             {

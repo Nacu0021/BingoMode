@@ -1,0 +1,22 @@
+{
+  "id": "nacu_shrub.bingomode",
+  "name": "Bingo",
+  "version": "2.0",
+  "authors": "Nacu, ICED, shrubftomtomorrow",
+  "checksum_override_version": false,
+  "description": "",
+  "requirements": [
+    "expedition"
+  ],
+  "requirements_names": [
+    "Expedition"
+  ],
+  "priorities": [
+    "moreslugcats"
+  ],
+  "tags": [
+    "Game Modes",
+    "Game Mechanics"
+  ],
+  "target_game_version": "v1.11.5"
+}

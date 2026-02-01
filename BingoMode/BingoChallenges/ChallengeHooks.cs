@@ -1,4 +1,10 @@
-﻿using BingoMode.BingoSteamworks;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
+using BingoMode.BingoChallenges.WatcherBingoChallenges;
+using BingoMode.BingoSteamworks;
 using Expedition;
 using Menu;
 using Menu.Remix;
@@ -7,15 +13,12 @@ using MonoMod.Cil;
 using MonoMod.RuntimeDetour;
 using MoreSlugcats;
 using RWCustom;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
 using UnityEngine;
+using Watcher;
 using CreatureType = CreatureTemplate.Type;
+using DLCItemType = DLCSharedEnums.AbstractObjectType;
 using ItemType = AbstractPhysicalObject.AbstractObjectType;
 using MSCItemType = MoreSlugcats.MoreSlugcatsEnums.AbstractObjectType;
-using DLCItemType = DLCSharedEnums.AbstractObjectType;
 
 namespace BingoMode.BingoChallenges
 {
@@ -120,7 +123,8 @@ namespace BingoMode.BingoChallenges
                 {
                     
                 }; 
-                Plugin.logger.LogError("Failed to recreate SettingBox from string!!!" + ex);
+                // Kind of an obnoxious log
+                //Plugin.logger.LogError("Failed to recreate SettingBox from string!" + ex);
                 return null;
             }
         }
@@ -129,7 +133,7 @@ namespace BingoMode.BingoChallenges
         public static Hook tokenColorHook;
         public static Hook placeKarmaFlowerHook;
 
-        // Sporecloud fix for owner recognition
+        // Sporecloud/graffiticloud fix for owner recognition (UpdatableAndDeletable)
         public static Dictionary<UpdatableAndDeletable, EntityID> ownerOfUAD = [];
         public static ConditionalWeakTable<Room, List<EntityID>> playerTradeItems = new ConditionalWeakTable<Room, List<EntityID>>();
 
@@ -140,6 +144,7 @@ namespace BingoMode.BingoChallenges
             On.SaveState.SessionEnded += ClearBs;
 
             // For damage and kill challenges, i put them here since theres so many and both challenges would have to do the same hooks
+            // watcher touches this
             On.Spear.HitSomething += Spear_HitSomething;
             On.Rock.HitSomething += Rock_HitSomething;
             On.ScavengerBomb.HitSomething += ScavengerBomb_HitSomething;
@@ -148,6 +153,9 @@ namespace BingoMode.BingoChallenges
             IL.SporeCloud.Update += SporeCloud_Update;
             IL.JellyFish.Collide += JellyFish_Collide;
             IL.PuffBall.Explode += PuffBall_Explode;
+            On.Boomerang.HitSomething += Boomerang_HitSomething;
+            IL.GraffitiBomb.Explode += GraffitiBomb_Explode;
+            IL.GraffitiCloud.Update += GraffitiCloud_Update;
             //IL.FlareBomb.Update += FlareBomb_Update;
 
             // No need for unlocked slugs
@@ -212,10 +220,10 @@ namespace BingoMode.BingoChallenges
             }
         }
 
-        public static void KarmaLadder_ctor(On.Menu.KarmaLadder.orig_ctor_Menu_MenuObject_Vector2_HUD_IntVector2_bool orig, KarmaLadder self, Menu.Menu menu, MenuObject owner, Vector2 pos, HUD.HUD hud, IntVector2 displayKarma, bool reinforced)
+        // we HATE constructors fuck them all we hate them, use this instead
+        public static void KarmaLadder_AddEndgameMeters(On.Menu.KarmaLadder.orig_AddEndgameMeters orig, KarmaLadder self)
         {
-            orig.Invoke(self, menu, owner, pos, hud, displayKarma, reinforced);
-
+            orig.Invoke(self);
             if (self.endGameMeters.Count == 0)
             {
                 return;
@@ -225,7 +233,7 @@ namespace BingoMode.BingoChallenges
             {
                 for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
                 {
-                    if (ExpeditionData.challengeList[j] is BingoAchievementChallenge c && 
+                    if (ExpeditionData.challengeList[j] is BingoAchievementChallenge c &&
                         meter.tracker.ID.value.ToUpperInvariant() == c.ID.Value.ToUpperInvariant() &&
                         meter.tracker.GoalFullfilled)
                     {
@@ -233,6 +241,7 @@ namespace BingoMode.BingoChallenges
                     }
                 }
             }
+
         }
 
         public static void Ghost_StartConversation(On.Ghost.orig_StartConversation orig, Ghost self)
@@ -431,7 +440,7 @@ namespace BingoMode.BingoChallenges
                 b.Emit(OpCodes.Ldloc, 1);
                 b.EmitDelegate<Action<string, string, SlugcatStats.Name>>((creature, region, slug) =>
                 {
-                    if (string.IsNullOrEmpty(creature) || !ChallengeUtils.Pinnable.Contains(creature)) return;
+                    if (string.IsNullOrEmpty(creature) || !ChallengeUtils.GetCorrectListForChallenge("pin").Contains(creature)) return;
                     string regionString = slug.value + "_" + region;
                     if (!BingoData.pinnableCreatureRegions.ContainsKey(creature))
                     {
@@ -761,7 +770,7 @@ namespace BingoMode.BingoChallenges
                     
                     if (BingoData.BingoMode && self.thrownBy != null && self.thrownBy.abstractCreature.creatureTemplate.type == CreatureType.Slugcat && self.room.abstractRoom.creatures[i].realizedCreature is Creature victim)
                     {
-                        ReportHit(self.abstractPhysicalObject.type, victim, self.abstractPhysicalObject.ID);
+                        ReportHit(self.abstractPhysicalObject.type.value, victim, self.abstractPhysicalObject.ID);
                     }
                 });
             }
@@ -814,17 +823,16 @@ namespace BingoMode.BingoChallenges
                 {
                     if (BingoData.BingoMode && explosion.sourceObject != null && explosion.killTagHolder is Player && explosion.room.physicalObjects[j][k] is Creature victim)
                     {
-                        if (!victim.dead) ReportHit(explosion.sourceObject.abstractPhysicalObject.type, victim, explosion.sourceObject.abstractPhysicalObject.ID);
+                        if (!victim.dead) ReportHit(explosion.sourceObject.abstractPhysicalObject.type.value, victim, explosion.sourceObject.abstractPhysicalObject.ID);
                     }
                 });
             }
             else Plugin.logger.LogError("Uh oh, Explosion_Update il fucked up " + il);
         }
 
-        public static void ReportHit(ItemType weapon, Creature victim, EntityID source, bool report = true)
+        public static void ReportHit(string weapon, Creature victim, EntityID source, bool report = true)
         {
             if (weapon == null || victim == null) return;
-            
 
             if (source != null && report)
             {
@@ -842,7 +850,7 @@ namespace BingoMode.BingoChallenges
             }
 
             EntityID id = victim.abstractCreature.ID;
-            if (!BingoData.hitTimeline.ContainsKey(id)) BingoData.hitTimeline.Add(id, []);  
+            if (!BingoData.hitTimeline.ContainsKey(id)) BingoData.hitTimeline.Add(id, []); 
             if (BingoData.hitTimeline.TryGetValue(id, out var gru) && (gru.Count == 0 || gru.Last() != weapon)) { gru.Remove(weapon); gru.Add(weapon);  }
         }
 
@@ -908,7 +916,7 @@ namespace BingoMode.BingoChallenges
         {
             if (BingoData.BingoMode && self.thrownBy is Player && result.obj is Creature victim && !victim.dead)
             {
-                ReportHit(self.abstractPhysicalObject.type, victim, self.abstractPhysicalObject.ID, false);
+                ReportHit(self.abstractPhysicalObject.type.value, victim, self.abstractPhysicalObject.ID, false);
             }
 
             return orig.Invoke(self, result, eu);
@@ -918,7 +926,7 @@ namespace BingoMode.BingoChallenges
         {
             if (BingoData.BingoMode && self.thrownBy is Player && result.obj is Creature victim && !victim.dead)
             {
-                ReportHit(self.abstractPhysicalObject.type, victim, self.abstractPhysicalObject.ID, true);
+                ReportHit(self.abstractPhysicalObject.type.value, victim, self.abstractPhysicalObject.ID, true);
             }
 
             return orig.Invoke(self, result, eu);
@@ -928,7 +936,7 @@ namespace BingoMode.BingoChallenges
         {
             if (BingoData.BingoMode && self.thrownBy is Player && result.obj is Creature victim && !victim.dead)
             {
-                ReportHit(self.abstractPhysicalObject.type, victim, self.abstractPhysicalObject.ID, false);
+                ReportHit(self.abstractPhysicalObject.type.value, victim, self.abstractPhysicalObject.ID, false);
             }
 
             return orig.Invoke(self, result, eu);
@@ -938,23 +946,10 @@ namespace BingoMode.BingoChallenges
         {
             if (BingoData.BingoMode && self.thrownBy is Player && result.obj is Creature victim && !victim.dead)
             {
-                ReportHit(self.abstractPhysicalObject.type, victim, self.abstractPhysicalObject.ID, false);
+                ReportHit(self.abstractPhysicalObject.type.value, victim, self.abstractPhysicalObject.ID, false);
             }
 
             return orig.Invoke(self, result, eu);
-        }
-
-        public static void PlayerTracker_Update2(On.ScavengerOutpost.PlayerTracker.orig_Update orig, ScavengerOutpost.PlayerTracker self)
-        {
-            orig.Invoke(self);
-
-            for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
-            {
-                if (self.PlayerOnOtherSide && ExpeditionData.challengeList[j] is BingoBombTollChallenge c)
-                {
-                    c.Pass(self.outpost.room.abstractRoom.name);
-                }
-            }
         }
 
         public static List<Challenge> revealInMemory = [];
@@ -995,7 +990,13 @@ namespace BingoMode.BingoChallenges
                 {
                     if (ExpeditionData.challengeList[j] is BingoBombTollChallenge c)
                     {
-                        c.Boom(self.room.abstractRoom.name);
+                        for (int k = 0; k < outpost.playerTrackers.Count; k++)
+                        {
+                            if (outpost.playerTrackers[k] != null)
+                            {
+                                c.Boom(self.room.abstractRoom.name, outpost.playerTrackers[k].PlayerOnOtherSide);
+                            }
+                        }
                     }
                 }
             }
@@ -1020,7 +1021,7 @@ namespace BingoMode.BingoChallenges
                                 {
                                     if (ExpeditionData.challengeList[p] is BingoTameChallenge c)
                                     {
-                                        c.Fren(self.AI.creature.creatureTemplate.type);
+                                        c.Fren(self.AI.creature);
                                     }
                                 }
                                 break;
@@ -1099,7 +1100,7 @@ namespace BingoMode.BingoChallenges
             // This one doesn't check if the game or world is null because I want to count the starting region (popular demand as well)
             for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
             {
-                if (ExpeditionData.challengeList[j] is BingoAllRegionsExcept allExcept)
+                if (ExpeditionData.challengeList[j] is BingoAllRegionsExceptChallenge allExcept)
                 {
                     allExcept.Entered(worldName);
                 }
@@ -1317,8 +1318,8 @@ namespace BingoMode.BingoChallenges
                                 EntityID givenItem = self.scavenger.room.socialEventRecognizer.ownedItemsOnGround[i].item.abstractPhysicalObject.ID;
                                 EntityID receivedItem = item.abstractPhysicalObject.ID;
                                 string room = self.creature.Room.name;
-                                
-                                
+
+
 
                                 if (givenItem != receivedItem && !t.traderItems.ContainsKey(givenItem)) t.traderItems.Add(givenItem, room);
                                 //t.Traded(receivedItem, room);
@@ -1405,7 +1406,8 @@ namespace BingoMode.BingoChallenges
                         Creature victim = self.room.abstractRoom.creatures[i].realizedCreature;
                         if (victim != null && !victim.dead && Custom.DistLess(self.pos, victim.mainBodyChunk.pos, self.rad + victim.mainBodyChunk.rad + 20f))
                         {
-                            ReportHit(ItemType.PuffBall, victim, ownerOfUAD[self]);
+                            // Make string
+                            ReportHit("PuffBall", victim, ownerOfUAD[self]);
                         }
                     }
                 });
@@ -1429,7 +1431,7 @@ namespace BingoMode.BingoChallenges
                 {
                     if (BingoData.BingoMode && self.thrownBy is Player)
                     {
-                        ReportHit(self.abstractPhysicalObject.type, obj as Creature, self.abstractPhysicalObject.ID, false);
+                        ReportHit(self.abstractPhysicalObject.type.value, obj as Creature, self.abstractPhysicalObject.ID, false);
                     }
                 });
             }
@@ -1588,13 +1590,13 @@ namespace BingoMode.BingoChallenges
         {
             ILCursor c = new(il);
             if (c.TryGotoNext(MoveType.After,
-                x => x.MatchLdloc(91),
+                x => x.MatchLdloc(89),
                 x => x.MatchCallOrCallvirt(typeof(List<PlacedObject>).GetMethod("get_Item")),
                 x => x.MatchLdfld<PlacedObject>("active")
                 ))
             {
                 c.Emit(OpCodes.Ldarg_0);
-                c.Emit(OpCodes.Ldloc, 91);
+                c.Emit(OpCodes.Ldloc, 89);
                 c.EmitDelegate<Func<bool, Room, int, bool>>((orig, self, i) =>
                 {
                     PlacedObject obj = self.roomSettings.placedObjects[i];
@@ -1876,5 +1878,311 @@ namespace BingoMode.BingoChallenges
                 }
             }
         }
+
+        #region watcher
+        public static void Watcher_WarpPoint_ChangeState_EnterRegion(On.Watcher.WarpPoint.orig_ChangeState orig, WarpPoint self, WarpPoint.State state)
+        {
+            orig(self, state);
+            // This is the state transition, so understand that we are not yet in the room, so destination region is appropriate
+            if (state == WarpPoint.State.SpawnItems)
+            {
+                for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+                {
+                    if (ExpeditionData.challengeList[j] is WatcherBingoEnterRegionChallenge wEnterRegion)
+                    {
+                        wEnterRegion.Entered(self.room.world.name.ToUpperInvariant());
+                    }
+                }
+            }
+        }
+
+        public static void Watcher_WarpPoint_ChangeState_NoRegion(On.Watcher.WarpPoint.orig_ChangeState orig, WarpPoint self, WarpPoint.State state)
+        {
+            orig(self, state);
+            if (state == WarpPoint.State.SpawnItems)
+            {
+                for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+                {
+                    if (ExpeditionData.challengeList[j] is WatcherBingoNoRegionChallenge wNoRegion)
+                    {
+                        wNoRegion.Entered(self.room.world.name.ToUpperInvariant());
+                    }
+                }
+            }
+        }
+
+        public static void Watcher_WarpPoint_ChangeState_AllRegionsExcept(On.Watcher.WarpPoint.orig_ChangeState orig, WarpPoint self, WarpPoint.State state)
+        {
+            orig(self, state);
+            if (state == WarpPoint.State.SpawnItems)
+            {
+                for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+                {
+                    if (ExpeditionData.challengeList[j] is WatcherBingoAllRegionsExceptChallenge wAllExcept)
+                    {
+                        wAllExcept.Entered(self.room.world.name.ToUpperInvariant());
+                    }
+                }
+            }
+        }
+
+        // copied from room.loaded
+        public static void Watcher_Room_Loaded_AllRegionsExcept(On.Room.orig_Loaded orig, Room self)
+        {
+            if (self.game == null) return;
+            if (self.abstractRoom.firstTimeRealized && ModManager.Expedition && self.game.rainWorld.ExpeditionMode && self.abstractRoom.shelter && self.abstractRoom.name == ExpeditionData.startingDen && self.game.rainWorld.progression.currentSaveState.cycleNumber == 0 && self.game.world.rainCycle.CycleProgression <= 0f)
+            {
+                for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+                {
+                    if (ExpeditionData.challengeList[j] is WatcherBingoAllRegionsExceptChallenge c)
+                    {
+                        c.Entered(self.world.name.ToUpperInvariant());
+                    }
+                }
+            }
+            orig(self);
+        }
+
+        public static void Watcher_WarpPoint_ChangeState_CreaturePortal(On.Watcher.WarpPoint.orig_ChangeState orig, WarpPoint self, WarpPoint.State state)
+        {
+            // Spawn items happens once the world is loaded so the current room is the one the player has just landed in
+            orig(self, state);
+            if (state == WarpPoint.State.SpawnItems)
+            {
+                for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+                {
+                    if (ExpeditionData.challengeList[j] is WatcherBingoCreaturePortalChallenge wCreaturePortal)
+                    {
+                        wCreaturePortal.Entered(self, self.room.game.GetStorySession.pendingWarpPointTransferObjects);
+                    }
+                }
+            }
+        }
+
+        public static void Watcher_SpinningTop_StartConversation(On.Watcher.SpinningTop.orig_StartConversation orig, SpinningTop self)
+        {
+            orig(self);
+            for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+            {
+                if (ExpeditionData.challengeList[j] is WatcherBingoSpinningTopChallenge c)
+                {
+                    for (int i = 0; i < self.room.game.Players.Count; i++)
+                    {
+                        c.SeeSpin(self.room.world.region.name, (self.room.game.Players[i].realizedCreature as Player).Malnourished);
+                    }
+                }
+            }
+        }
+
+        public static void Watcher_Pomegranate_Smash(On.Pomegranate.orig_Smash orig, Pomegranate self)
+        {
+            orig.Invoke(self);
+
+            for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+            {
+                if (ExpeditionData.challengeList[j] is WatcherBingoOpenMelonsChallenge c)
+                {
+                    c.Open();
+                }
+            }
+        }
+
+        public static void Watcher_VoidSpawnEgg_Pop(On.VoidSpawnEgg.orig_Pop orig, VoidSpawnEgg self)
+        {
+            orig.Invoke(self);
+
+            for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+            {
+                if (ExpeditionData.challengeList[j] is WatcherBingoCollectRippleSpawnChallenge c)
+                {
+                    c.Pop();
+                }
+            }
+        }
+
+        public static void Watcher_PrinceBehavior_InitateConversation(On.Watcher.PrinceBehavior.orig_InitateConversation orig, PrinceBehavior self)
+        {
+            orig.Invoke(self);
+
+            for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+            {
+                if (ExpeditionData.challengeList[j] is WatcherBingoPrinceChallenge c)
+                {
+                    c.Meet();
+                }
+            }
+        }
+
+        public static void Watcher_VoidWeaver_DefaultBehavior_StartMonologue(On.Watcher.VoidWeaver.DefaultBehavior.orig_StartMonologue orig, VoidWeaver.DefaultBehavior self)
+        {
+            orig.Invoke(self);
+            for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+            {
+                if (ExpeditionData.challengeList[j] is WatcherBingoWeaverChallenge c && c.region == self.owner.room.abstractRoom.world.name.ToUpperInvariant())
+                {
+                    c.Meet();
+                }
+            }
+        }
+
+        public static bool Boomerang_HitSomething(On.Boomerang.orig_HitSomething orig, Boomerang self, SharedPhysics.CollisionResult result, bool eu)
+        {
+            if (BingoData.BingoMode && self.thrownBy is Player && result.obj is Creature victim && !victim.dead)
+            {
+                ReportHit(self.abstractPhysicalObject.type.value, victim, self.abstractPhysicalObject.ID, false);
+            }
+            return orig.Invoke(self, result, eu);
+        }
+
+        public static void GraffitiBomb_Explode(ILContext il)
+        {
+            ILCursor c = new(il);
+
+            if (c.TryGotoNext(MoveType.Before,
+                x => x.MatchNewobj<GraffitiCloud>(),
+                x => x.MatchCallOrCallvirt<Room>("AddObject")
+                ))
+            {
+                c.Index++;
+                c.Emit(OpCodes.Ldarg_0);
+                c.EmitDelegate<Func<GraffitiCloud, GraffitiBomb, GraffitiCloud>>((orig, self) =>
+                {
+                    if (BingoData.BingoMode && self.thrownBy != null && self.thrownBy.abstractCreature.creatureTemplate.type == CreatureType.Slugcat)
+                    {
+                        ownerOfUAD[orig] = self.abstractPhysicalObject.ID;
+                    }
+
+                    return orig;
+                });
+            }
+            else Plugin.logger.LogError("Uh oh, GraffitiBomb_Explode il fucked up " + il);
+        }
+
+        public static void GraffitiCloud_Update(ILContext il)
+        {
+            ILCursor c = new(il);
+
+            if (c.TryGotoNext(
+                x => x.MatchCallOrCallvirt<AbstractCreature>("get_realizedCreature")
+                ))
+            {
+                c.Index += 3;
+                c.Emit(OpCodes.Ldarg_0);
+                c.Emit(OpCodes.Ldloc, 5);
+                c.EmitDelegate<Action<GraffitiCloud, int>>((self, i) =>
+                {
+                    if (!self.slatedForDeletetion && BingoData.BingoMode && ownerOfUAD.ContainsKey(self) && self != null && self.thrownBy != null && self.thrownBy.creatureTemplate.type == CreatureType.Slugcat)
+                    {
+                        Creature victim = self.room.abstractRoom.creatures[i].realizedCreature;
+                        if (victim != null && !victim.dead && Custom.DistLess(self.pos, victim.mainBodyChunk.pos, self.rad + victim.mainBodyChunk.rad + 20f))
+                        {
+                            ReportHit("GraffitiBomb", victim, ownerOfUAD[self]);
+                        }
+                    }
+                });
+            }
+            else Plugin.logger.LogError("Uh oh, GraffitiBomb_Update il fucked up " + il);
+        }
+
+        public static void Frog_Thrown(On.Watcher.Frog.orig_Thrown orig, Frog self, Creature thrownBy, Vector2 thrownPos, Vector2? firstFrameTraceFromPos, IntVector2 throwDir, float frc, bool eu)
+        {
+            for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+            {
+                if (ExpeditionData.challengeList[j] is BingoDamageChallenge c && c.weapon.Value == "Frog" && !c.completed && !c.TeamsCompleted[SteamTest.team] && !c.revealed && !c.frogsThrown.Contains(self.abstractCreature.ID.ToString()))
+                {
+                    c.frogsThrown.Add(self.abstractCreature.ID.ToString());
+                }
+            }
+            orig.Invoke(self, thrownBy, thrownPos, firstFrameTraceFromPos, throwDir, frc, eu);
+        }
+
+        public static void Frog_Jump(On.Watcher.Frog.orig_Jump orig, Watcher.Frog self, Vector2 jumpDir, bool ignoreNoJumps)
+        {
+            for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+            {
+                if (ExpeditionData.challengeList[j] is BingoDamageChallenge c && c.weapon.Value == "Frog" && !c.completed && !c.TeamsCompleted[SteamTest.team] && !c.revealed && c.frogsThrown.Contains(self.abstractCreature.ID.ToString()))
+                {
+                    c.frogsThrown.Remove(self.abstractCreature.ID.ToString());
+                }
+            }
+            orig.Invoke(self, jumpDir, ignoreNoJumps);
+        }
+
+        public static void Frog_Attach(On.Watcher.Frog.orig_Attach orig, Frog self, BodyChunk chunk, bool suckedFood = false)
+        {
+            for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+            {
+                if (ExpeditionData.challengeList[j] is BingoDamageChallenge c && c.weapon.Value == "Frog" && chunk.owner is Creature victim && !victim.dead && !c.completed && !c.TeamsCompleted[SteamTest.team] && !c.revealed && c.frogsThrown.Contains(self.abstractCreature.ID.ToString()))
+                {
+                    ReportHit(self.abstractCreature.creatureTemplate.name, victim, self.abstractPhysicalObject.ID, false);
+                    c.frogsThrown.Remove(self.abstractCreature.ID.ToString());
+                }
+            }
+            orig.Invoke(self, chunk, suckedFood);
+        }
+
+        public static void Watcher_Room_Loaded(On.Room.orig_Loaded orig, Room self)
+        {
+            orig(self);
+            if (self.game == null) return;
+            for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+            {
+                if (ExpeditionData.challengeList[j] is WatcherBingoWeaverChallenge c && !c.completed && !c.TeamsCompleted[SteamTest.team] && !c.revealed && c.room.Value == self.abstractRoom.name.ToUpperInvariant())
+                {
+                    Vector2 pos = new Vector2(0, 0);
+
+                    foreach (var thing in self.roomSettings.placedObjects)
+                    {
+                        if (thing.type == PlacedObject.Type.DynamicWarpTarget)
+                        {
+                            pos = thing.pos;
+                        }
+                    }
+                    PlacedObject po = new PlacedObject(PlacedObject.Type.WarpPoint, null);
+
+                    WarpPoint.WarpPointData warpPointData = new WarpPoint.WarpPointData(po);
+                    po.data = warpPointData;
+                    po.pos = pos;
+
+                    (warpPointData).cycleSpawnedOn = self.world.game.GetStorySession.saveState.cycleNumber - 6;
+                    (warpPointData).cycleExpiry = 5;
+                    (warpPointData).destRoom = "NARNIA";
+                    (warpPointData).destTimeline = self.world.game.TimelinePoint;
+
+                    WarpPoint warpPoint = new WarpPoint(self, po);
+                    self.AddObject(warpPoint);
+                }
+            }
+        }
+
+        public static void Watcher_ShelterDoor_Close(On.ShelterDoor.orig_Close orig, ShelterDoor self)
+        {
+            orig.Invoke(self);
+
+            if (self.Broken || self.closedFac != 0f) return;
+            int grubbies = 0;
+
+            foreach (var entity in self.room.abstractRoom.entities)
+            {
+                if (entity is AbstractCreature c && c.creatureTemplate.type == WatcherEnums.CreatureTemplateType.MothGrub)
+                {
+                    grubbies++;
+                }
+            }
+
+            if (grubbies == 0) return;
+            for (int j = 0; j < ExpeditionData.challengeList.Count; j++)
+            {
+                if (ExpeditionData.challengeList[j] is WatcherBingoHatchMothGrubChallenge c)
+                {
+                    for (int e = 0; e < grubbies; e++)
+                    {
+                        c.Hatch();
+                    }
+                }
+            }
+        }
+
+        #endregion
     }
 }

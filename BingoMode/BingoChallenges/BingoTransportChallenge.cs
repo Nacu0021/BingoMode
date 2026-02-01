@@ -80,7 +80,7 @@ namespace BingoMode.BingoChallenges
         {
             Phrase phrase = new(
                 [[Icon.FromEntityName(crit.Value)],
-                [new Icon("singlearrow")]]);
+                [new Icon(Plugin.PluginInstance.BingoConfig.FillIcons.Value ? "keyShiftB" : "keyShiftA", 1f, Color.white, 90)]]);
             if (from.Value != "Any Region") phrase.InsertWord(new Verse(from.Value), 1, 0);
             if (to.Value != "Any Region") phrase.InsertWord(new Verse(to.Value), 1);
             return phrase;
@@ -100,10 +100,10 @@ namespace BingoMode.BingoChallenges
         {
             // hate this this took me like half an hour
             SlugcatStats.Name slug = ExpeditionData.slugcatPlayer;
-            string[] possible = ChallengeUtils.Transportable.Where(x => slug != MoreSlugcatsEnums.SlugcatStatsName.Saint || !new List<string>(){ "CicadaA", "CicadaB" }.Contains(x)).ToArray();
+            string[] possible = ChallengeUtils.GetCorrectListForChallenge("transport");
             string crug = possible[Random.Range(0, possible.Length - (ModManager.MSC && slug != SlugcatStats.Name.Red && slug != MoreSlugcatsEnums.SlugcatStatsName.Spear && slug != MoreSlugcatsEnums.SlugcatStatsName.Artificer ? 0 : 1))];
             List<string> origRegions = ChallengeUtils.CreatureOriginRegions(crug, slug);
-            List<string> allRegions = crug == "JetFish" ? ["SB"] : [.. ChallengeUtils.GetSortedCorrectListForChallenge("regionsreal")];
+            List<string> allRegions = crug == "JetFish" ? ["SB"] : [.. ChallengeUtils.GetCorrectListForChallenge("regionsreal", true)];
             string fromage = Random.value < 0.5f ? "Any Region" : origRegions[Random.Range(0, origRegions.Count)];
             allRegions.Remove(fromage);
             allRegions.Remove("MS");

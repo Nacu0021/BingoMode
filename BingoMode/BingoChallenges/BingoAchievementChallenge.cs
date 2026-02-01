@@ -98,22 +98,10 @@ namespace BingoMode.BingoChallenges
 
         public override Challenge Generate()
         {
-            List<WinState.EndgameID> list = new List<WinState.EndgameID>();
-            for (int i = 0; i < ChallengeTools.achievementScores.Count; i++)
-            {
-                if (ModManager.MSC && 
-                    (ChallengeTools.achievementScores.ElementAt(i).Key == MoreSlugcatsEnums.EndgameID.Mother ||
-                    ChallengeTools.achievementScores.ElementAt(i).Key == MoreSlugcatsEnums.EndgameID.Gourmand ||
-                    (ExpeditionData.slugcatPlayer == MoreSlugcatsEnums.SlugcatStatsName.Saint && 
-                    ChallengeTools.achievementScores.ElementAt(i).Key == WinState.EndgameID.Scholar)))
-                    continue;
-
-                list.Add(ChallengeTools.achievementScores.ElementAt(i).Key);
-            }
-            WinState.EndgameID id = list[Random.Range(0, list.Count)];
+            string id = ChallengeUtils.GetCorrectListForChallenge("passage")[Random.Range(0, ChallengeUtils.GetCorrectListForChallenge("passage").Length)];
             return new BingoAchievementChallenge
             {
-                ID = new(id.value, "Passage", 0, listName: "passage")
+                ID = new(id, "Passage", 0, listName: "passage")
             };
         }
 
@@ -127,25 +115,6 @@ namespace BingoMode.BingoChallenges
             if (completed || TeamsCompleted[SteamTest.team] || revealed || hidden) return;
             CompleteChallenge();
         }
-
-        //public void CheckAchievementProgress(WinState winState)
-        //{
-        //    
-        //    if (completed || TeamsCompleted[SteamTest.team] || revealed || hidden)
-        //    {
-        //        return;
-        //    }
-        //    if (winState != null)
-        //    {
-        //        WinState.EndgameTracker tracker = winState.GetTracker(new(ID.Value), true);
-        //        
-        //        if (tracker != null && tracker.GoalFullfilled)
-        //        {
-        //            
-        //            this.CompleteChallenge();
-        //        }
-        //    }
-        //}
 
         public override string ToString()
         {
@@ -180,15 +149,12 @@ namespace BingoMode.BingoChallenges
 
         public override void AddHooks()
         {
-            //IL.WinState.CycleCompleted += WinState_CycleCompleted;
-            On.Menu.KarmaLadder.ctor_Menu_MenuObject_Vector2_HUD_IntVector2_bool += KarmaLadder_ctor;
+            On.Menu.KarmaLadder.AddEndgameMeters += KarmaLadder_AddEndgameMeters;
         }
 
         public override void RemoveHooks()
         {
-
-            //IL.WinState.CycleCompleted -= WinState_CycleCompleted;
-            On.Menu.KarmaLadder.ctor_Menu_MenuObject_Vector2_HUD_IntVector2_bool -= KarmaLadder_ctor;
+            On.Menu.KarmaLadder.AddEndgameMeters -= KarmaLadder_AddEndgameMeters;
         }
 
         public override List<object> Settings() => [ID];

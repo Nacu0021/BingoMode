@@ -75,7 +75,7 @@ namespace BingoMode.BingoChallenges
         public override Phrase ConstructPhrase()
         {
             return new Phrase(
-                [[new Icon("steal_item"), Icon.FromEntityName(subject.Value), toll.Value ? Icon.SCAV_TOLL : Icon.FromEntityName("Scavenger")],
+                [[new Icon("steal_item"), subject.Value == "KarmaFlower" ? Icon.KARMA_FLOWER : Icon.FromEntityName(subject.Value), toll.Value ? Icon.SCAV_TOLL : Icon.FromEntityName("Scavenger")],
                 [new Counter(current, amount.Value)]]);
         }
 
@@ -97,7 +97,7 @@ namespace BingoMode.BingoChallenges
             {
                 itme = UnityEngine.Random.value < 0.5f ? "Spear": "DataPearl";
             }
-            else itme = ChallengeUtils.StealableStolable[UnityEngine.Random.Range(0, ChallengeUtils.StealableStolable.Length - (ModManager.MSC ? 0 : 2))];
+            else itme = ChallengeUtils.GetCorrectListForChallenge("theft")[UnityEngine.Random.Range(0, ChallengeUtils.GetCorrectListForChallenge("theft").Length)];
 
             return new BingoStealChallenge
             {

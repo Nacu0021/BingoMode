@@ -18,7 +18,7 @@ namespace BingoMode.BingoChallenges
 
         public override Challenge Random()
         {
-            BingoAllRegionsExcept challenge = new();
+            BingoAllRegionsExceptChallenge challenge = new();
             challenge.region.Value = region.Random();
             challenge.required.Value = required.Random();
             return challenge;
@@ -40,14 +40,14 @@ namespace BingoMode.BingoChallenges
             required = Randomizer<int>.InitDeserialize(dict["required"]);
         }
     }
-    public class BingoAllRegionsExcept : BingoChallenge
+    public class BingoAllRegionsExceptChallenge : BingoChallenge
     {
         public SettingBox<string> region;
         public SettingBox<int> required;
         public List<string> regionsToEnter = [];
         public int current;
 
-        public BingoAllRegionsExcept()
+        public BingoAllRegionsExceptChallenge()
         {
             region = new("", "Region", 0, listName: "regionsreal");
             regionsToEnter = [.. ChallengeUtils.AllEnterableRegions];
@@ -56,21 +56,21 @@ namespace BingoMode.BingoChallenges
 
         public override void UpdateDescription()
         {
-            this.description = ChallengeTools.IGT.Translate("Enter [<current>/<required>] regions without entering " + ChallengeTools.IGT.Translate(Region.GetRegionFullName(region.Value, ExpeditionData.slugcatPlayer)))
-                .Replace("<required>", required.Value.ToString()).Replace("<current>", current.ToString());
+            this.description = ChallengeTools.IGT.Translate("Enter [<current>/<required>] regions without entering ").Replace("<required>", required.Value.ToString()).Replace("<current>", current.ToString())
+                + ChallengeTools.IGT.Translate(Region.GetRegionFullName(region.Value, ExpeditionData.slugcatPlayer));
             base.UpdateDescription();
         }
 
         public override Phrase ConstructPhrase()
         {
             return new Phrase(
-                [[new Icon("TravellerA"), new Icon("buttonCrossA", 1f, Color.red), new Verse(region.Value)],
+                [[new Icon("TravellerA"), new Icon(Plugin.PluginInstance.BingoConfig.FillIcons.Value ? "buttonCrossB" : "buttonCrossA", 1f, Color.red), new Verse(region.Value)],
                 [new Counter(current, required.Value)]]);
         }
 
         public override bool Duplicable(Challenge challenge)
         {
-            return challenge is not BingoAllRegionsExcept;
+            return challenge is not BingoAllRegionsExceptChallenge;
         }
 
         public override string ChallengeName()
@@ -81,16 +81,16 @@ namespace BingoMode.BingoChallenges
         public override void Reset()
         {
             base.Reset();
-            regionsToEnter = ChallengeUtils.GetSortedCorrectListForChallenge("regionsreal").ToList();
+            regionsToEnter = ChallengeUtils.GetCorrectListForChallenge("regionsreal", true).ToList();
         }
 
         public override Challenge Generate()
         {
-            List<string> regiones = ChallengeUtils.GetSortedCorrectListForChallenge("regionsreal").ToList();
+            List<string> regiones = ChallengeUtils.GetCorrectListForChallenge("regionsreal", true).ToList();
             string regionn = regiones[UnityEngine.Random.Range(0, regiones.Count)];
             int req = UnityEngine.Random.Range(3, regiones.Count - 4);
 
-            return new BingoAllRegionsExcept
+            return new BingoAllRegionsExceptChallenge
             {
                 region = new(regionn, "Region", 0, listName: "regionsreal"),
                 regionsToEnter = ChallengeUtils.AllEnterableRegions.ToList(),
@@ -142,7 +142,7 @@ namespace BingoMode.BingoChallenges
         {
             return string.Concat(new string[]
             {
-                "BingoAllRegionsExcept",
+                "BingoAllRegionsExceptChallenge",
                 "~",
                 region.ToString(),
                 "><",
@@ -173,7 +173,7 @@ namespace BingoMode.BingoChallenges
             }
             catch (Exception ex)
             {
-                ExpLog.Log("ERROR: BingoAllRegionsExcept FromString() encountered an error: " + ex.Message);
+                ExpLog.Log("ERROR: BingoAllRegionsExceptChallenge FromString() encountered an error: " + ex.Message);
                 throw ex;
             }
         }

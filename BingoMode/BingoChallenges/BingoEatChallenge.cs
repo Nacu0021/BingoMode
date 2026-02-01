@@ -28,8 +28,8 @@ namespace BingoMode.BingoChallenges
             challenge.foodType.Value = foodType.Random();
             challenge.amountRequired.Value = amountRequired.Random();
             challenge.starve.Value = starve.Random();
-            int index = Array.IndexOf(ChallengeUtils.FoodTypes, challenge.foodType.Value);
-            challenge.isCreature = index >= Array.IndexOf(ChallengeUtils.FoodTypes, "VultureGrub");
+            int index = Array.IndexOf(ChallengeUtils.GetCorrectListForChallenge("food"), challenge.foodType.Value);
+            challenge.isCreature = index >= Array.IndexOf(ChallengeUtils.GetCorrectListForChallenge("food"), "VultureGrub");
             return challenge;
         }
 
@@ -67,6 +67,7 @@ namespace BingoMode.BingoChallenges
             starve = new(false, "While Starving", 2);
         }
 
+        // Check customizer dialogue for updating iscreature
         public override void UpdateDescription()
         {
             if (ChallengeTools.creatureNames == null)
@@ -86,7 +87,7 @@ namespace BingoMode.BingoChallenges
             Phrase phrase = new(
                 [[new Icon("foodSymbol"), Icon.FromEntityName(foodType.Value)],
                 [new Counter(currentEated, amountRequired.Value)]]);
-            if (starve.Value) phrase.InsertWord(new Icon("Multiplayer_Death"), 1);
+            if (starve.Value) phrase.InsertWord(new Icon("MartyrB"), 1);
             return phrase;
         }
 
@@ -104,27 +105,16 @@ namespace BingoMode.BingoChallenges
         {
             bool c = UnityEngine.Random.value < 0.5f;
 
-            int critStart = Array.IndexOf(ChallengeUtils.FoodTypes, "VultureGrub");
-            int foodCount = ChallengeUtils.FoodTypes.Length;
+            int critStart = Array.IndexOf(ChallengeUtils.GetCorrectListForChallenge("food"), "VultureGrub");
+            int foodCount = ChallengeUtils.GetCorrectListForChallenge("food").Length;
             string randomFood;
             if (c)
             {
-                randomFood = ChallengeUtils.FoodTypes[UnityEngine.Random.Range(critStart, foodCount)];
+                randomFood = ChallengeUtils.GetCorrectListForChallenge("food")[UnityEngine.Random.Range(critStart, foodCount)];
             }
             else
             {
-                List<string> foob = [.. ChallengeUtils.FoodTypes];
-                if (!ModManager.MSC) foob.RemoveRange(Array.IndexOf(ChallengeUtils.FoodTypes, "GooieDuck"), 4);
-                else if (ExpeditionData.slugcatPlayer != MoreSlugcatsEnums.SlugcatStatsName.Rivulet &&
-                         ExpeditionData.slugcatPlayer != MoreSlugcatsEnums.SlugcatStatsName.Saint) foob.Remove("GlowWeed");
-                if (ExpeditionData.slugcatPlayer == MoreSlugcatsEnums.SlugcatStatsName.Saint)
-                {
-                    foob.Remove("EggBugEgg");
-                    foob.Remove("DandelionPeach");
-                    foob.Remove("SSOracleSwarmer");
-                    foob.Remove("SmallNeedleWorm");
-                }
-                randomFood = foob[UnityEngine.Random.Range(0, foob.Count - (foodCount - critStart))];
+                randomFood = ChallengeUtils.GetCorrectListForChallenge("food")[UnityEngine.Random.Range(0, ChallengeUtils.GetCorrectListForChallenge("food").Length - (foodCount - critStart))];
             }
 
             return new BingoEatChallenge()
@@ -132,7 +122,7 @@ namespace BingoMode.BingoChallenges
                 foodType = new(randomFood, "Food type", 0, listName: "food"),
                 isCreature = c,
                 starve = new(UnityEngine.Random.value < 0.1f, "While Starving", 2),
-                amountRequired = new(UnityEngine.Random.Range(3, 8) * (isCreature && foodType.Value == "Fly" ? 2 : 1), "Amount", 3)
+                amountRequired = new(UnityEngine.Random.Range(3, 8) * (isCreature && foodType.Value == "Fly" ? 2 : 1), "Amount", 1)
             };
         }
 
@@ -206,27 +196,13 @@ namespace BingoMode.BingoChallenges
             try
             {
                 string[] array = Regex.Split(args, "><");
-                if (array.Length == 7)
-                {
-                    amountRequired = SettingBoxFromString(array[0]) as SettingBox<int>;
-                    currentEated = int.Parse(array[1], NumberStyles.Any, CultureInfo.InvariantCulture);
-                    isCreature = (array[2] == "1");
-                    foodType = SettingBoxFromString(array[3]) as SettingBox<string>;
-                    starve = SettingBoxFromString(array[4]) as SettingBox<bool>;
-                    completed = (array[5] == "1");
-                    revealed = (array[6] == "1");
-                }
-                // Legacy board eat challenge compatibility
-                else if (array.Length == 6)
-                {
-                    amountRequired = SettingBoxFromString(array[0]) as SettingBox<int>;
-                    currentEated = int.Parse(array[1], NumberStyles.Any, CultureInfo.InvariantCulture);
-                    isCreature = (array[2] == "1");
-                    foodType = SettingBoxFromString(array[3]) as SettingBox<string>;
-                    completed = (array[4] == "1");
-                    revealed = (array[5] == "1");
-                    starve = SettingBoxFromString("System.Boolean|false|While Starving|2|NULL") as SettingBox<bool>;
-                }
+                amountRequired = SettingBoxFromString(array[0]) as SettingBox<int>;
+                currentEated = int.Parse(array[1], NumberStyles.Any, CultureInfo.InvariantCulture);
+                isCreature = (array[2] == "1");
+                foodType = SettingBoxFromString(array[3]) as SettingBox<string>;
+                starve = SettingBoxFromString(array[4]) as SettingBox<bool>;
+                completed = (array[5] == "1");
+                revealed = (array[6] == "1");
                 UpdateDescription();
             }
             catch (Exception ex)

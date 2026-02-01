@@ -1,12 +1,12 @@
-﻿using BepInEx;
-using BepInEx.Logging;
+﻿using System;
+using System.Reflection;
 using System.Security;
 using System.Security.Permissions;
-using MonoMod.RuntimeDetour;
-using System;
-using System.Reflection;
-using MonoMod.Cil;
+using BepInEx;
+using BepInEx.Logging;
 using Mono.Cecil.Cil;
+using MonoMod.Cil;
+using MonoMod.RuntimeDetour;
 using UnityEngine;
 
 #pragma warning disable CS0618
@@ -16,21 +16,26 @@ using UnityEngine;
 
 namespace BingoMode
 {
-    using BingoSteamworks;
+    using System.Collections;
+    using System.Collections.Generic;
+    using System.Diagnostics;
+    using System.IO;
+    using System.Linq;
     using BingoChallenges;
     using BingoHUD;
-    using System.IO;
+    using BingoSteamworks;
 
-    [BepInPlugin("nacu.bingomode", "Bingo", VERSION)]
+    [BepInPlugin("nacu_shrub.bingomode", "Bingo", VERSION)]
     public class Plugin : BaseUnityPlugin
     {
-        public const string VERSION = "1.26";
+        public const string VERSION = "2.0";
         public static bool AppliedAlreadyDontDoItAgainPlease;
         public static bool AppliedAlreadyDontDoItAgainPleasePartTwo;
         internal static ManualLogSource logger;
         private BingoModOptions _bingoConfig;
         public BingoModOptions BingoConfig => _bingoConfig;
         public static Plugin PluginInstance;
+        public static bool AutoRestarter;
 
         public void OnEnable()
         {
@@ -40,6 +45,11 @@ namespace BingoMode
             logger = Logger;
             On.RainWorld.OnModsInit += OnModsInit;
             On.RainWorld.PostModsInit += RainWorld_PostModsInit;
+            // Always restart
+            On.Menu.ModdingMenu.Singal += ModdingMenu_Singal;
+            // Auto restart
+            On.ModManager.ModApplyer.RequiresRestart += ModApplyer_RequiresRestart;
+
             BingoHooks.EarlyApply();
             BingoSaveFile.Apply();
         }
@@ -70,7 +80,6 @@ namespace BingoMode
         public static void OnModsInit(On.RainWorld.orig_OnModsInit orig, RainWorld raingame)
         { 
             orig(raingame);
-
             if (!AppliedAlreadyDontDoItAgainPlease)
             {
                 AppliedAlreadyDontDoItAgainPlease = true;
@@ -86,15 +95,18 @@ namespace BingoMode
                 Futile.atlasManager.LoadAtlas("Atlases/bingomode");
                 Futile.atlasManager.LoadAtlas("Atlases/bingoicons");
                 BingoEnums.Register();
-                
+                // Passage screens
+                BingoEnums.LandscapeType.RegisterValues();
+
                 BingoHooks.Apply();
                 ChallengeHooks.Apply();
                 ChallengeUtils.Apply();
+                DiscordSDK.DiscordInit.Init();
 
                 // Timeline fix
                 IL.MainLoopProcess.RawUpdate += MainLoopProcess_RawUpdate;
 
-                MachineConnector.SetRegisteredOI("nacu.bingomode", PluginInstance.BingoConfig);
+                MachineConnector.SetRegisteredOI("nacu_shrub.bingomode", PluginInstance.BingoConfig);
             }
         }
 
@@ -105,8 +117,14 @@ namespace BingoMode
             if (!AppliedAlreadyDontDoItAgainPleasePartTwo)
             {
                 AppliedAlreadyDontDoItAgainPleasePartTwo = true;
-                BingoData.LoadAllBannedChallengeLists();
+                foreach (SlugcatStats.Name slug in Expedition.ExpeditionData.GetPlayableCharacters())
+                {
+                    BingoData.LoadAllBannedChallengeLists(slug);
+                }
             }
+
+            AutoRestarter = ModManager.ActiveMods.Any(x => x.id == "Gamer025.RemixAutoRestart" || x.id == "MenuFixes");
+            ChallengeUtilsFiltering.ClearCache();
         }
 
         public static void MainLoopProcess_RawUpdate(ILContext il)
@@ -126,6 +144,70 @@ namespace BingoMode
                 });
             }
             else logger.LogError("MainLoopProcess_RawUpdate IL fail " + il);
+        }
+
+        public static void ModdingMenu_Singal(On.Menu.ModdingMenu.orig_Singal orig, Menu.ModdingMenu self, Menu.MenuObject sender, string message)
+        {
+            if (AutoRestarter)
+            {
+                orig.Invoke(self, sender, message);
+                return;
+            }
+            if (message == "RESTART")
+            {
+                Process currentProcess = Process.GetCurrentProcess();
+                string fileName = "\"" + currentProcess.MainModule.FileName + "\"";
+                IDictionary environmentVariables = Environment.GetEnvironmentVariables(EnvironmentVariableTarget.Process);
+                List<string> list = new List<string>();
+                foreach (object obj in environmentVariables)
+                {
+                    DictionaryEntry dictionaryEntry = (DictionaryEntry)obj;
+                    if (dictionaryEntry.Key.ToString().StartsWith("DOORSTOP"))
+                    {
+                        list.Add(dictionaryEntry.Key.ToString());
+                    }
+                }
+                foreach (string key in list)
+                {
+                    environmentVariables.Remove(key);
+                }
+                ProcessStartInfo processStartInfo = new ProcessStartInfo();
+                processStartInfo.EnvironmentVariables.Clear();
+                foreach (object obj2 in environmentVariables)
+                {
+                    DictionaryEntry dictionaryEntry2 = (DictionaryEntry)obj2;
+                    processStartInfo.EnvironmentVariables.Add((string)dictionaryEntry2.Key, (string)dictionaryEntry2.Value);
+                }
+                processStartInfo.UseShellExecute = false;
+                processStartInfo.FileName = fileName;
+                List<string> list2 = new List<string>();
+                string[] commandLineArgs = Environment.GetCommandLineArgs();
+                for (int i = 0; i < commandLineArgs.Length; i++)
+                {
+                    if (i != 0)
+                    {
+                        if (commandLineArgs[i] == "-logFile")
+                        {
+                            i++;
+                        }
+                        else
+                        {
+                            list2.Add(commandLineArgs[i]);
+                        }
+                    }
+                }
+                processStartInfo.Arguments = string.Join(" ", list2.ToArray());
+                Process.Start(processStartInfo);
+                Application.Quit();
+            }
+            orig.Invoke(self, sender, message);
+        }
+
+        // Always restart even on DLC changes
+        private bool ModApplyer_RequiresRestart(On.ModManager.ModApplyer.orig_RequiresRestart orig, ModManager.ModApplyer self)
+        {
+            //return orig.Invoke(self);
+            return true;
         }
     }
 }

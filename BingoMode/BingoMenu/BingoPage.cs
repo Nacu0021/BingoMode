@@ -1,5 +1,6 @@
 ﻿using BingoMode.BingoChallenges;
 using Expedition;
+using Watcher;
 using Menu;
 using Menu.Remix;
 using Menu.Remix.MixedUI;
@@ -28,6 +29,11 @@ namespace BingoMode.BingoMenu
         private const float BACK_BUTTON_SIZE = 45f;
         private const float TITLE_SPRITE_ALIGN = 5f;
 
+        private FAtlasElement normalTitle;
+        private FAtlasElement watcherTitle;
+
+        private MenuLabel nowPlaying;
+
         private FSprite title;
         private SymbolButton back;
         #endregion
@@ -36,6 +42,11 @@ namespace BingoMode.BingoMenu
         public BingoGrid grid;
         private BoardControls boardControls;
         private GameControls gameControls;
+        public string Shelter
+        {
+            get => gameControls.Shelter; set => gameControls.Shelter = value;
+        }
+
         public SymbolButton eggButton;
 
         #region Multiplayer
@@ -104,8 +115,16 @@ namespace BingoMode.BingoMenu
             BingoData.BingoMode = false;
             BingoData.TeamsInBingo = [0];
 
+            normalTitle = Futile.atlasManager.GetElementWithName("bingotitle");
+            watcherTitle = Futile.atlasManager.GetElementWithName("bingotitlewatcher");
+
+            nowPlaying = new MenuLabel(menu, owner, expMenu.characterSelect.nowPlaying.label.text, new Vector2(683f, 35f), default(Vector2), true, null);
+            nowPlaying.label.color = new Color(0.5f, 0.5f, 0.5f);
+            nowPlaying.label.shader = menu.manager.rainWorld.Shaders["MenuTextCustom"];
+            subObjects.Add(nowPlaying);
+
             Vector2 topCenter = new(menu.manager.rainWorld.screenSize.x / 2f, menu.manager.rainWorld.screenSize.y - TITLE_MARGIN);
-            title = new("bingotitle")
+            title = new(normalTitle)
             {
                 anchorX = 0.5f,
                 anchorY = 1f,
@@ -163,7 +182,7 @@ namespace BingoMode.BingoMenu
 
             if (ExpeditionData.ints.Sum() >= 8)
             {
-                eggButton = new SymbolButton(menu, this, "GuidanceSlugcat", "EGGBUTTON", new Vector2(663f, 25f));
+                eggButton = new SymbolButton(menu, this, "GuidanceSlugcat", "EGGBUTTON", new Vector2(1313f, 11f));
                 eggButton.roundedRect.size = new Vector2(40f, 40f);
                 eggButton.size = eggButton.roundedRect.size;
                 subObjects.Add(eggButton);
@@ -174,7 +193,6 @@ namespace BingoMode.BingoMenu
         {
             gameControls.HostPrivilege = isHost;
             boardControls.HostPrivilege = isHost;
-            randomizerButton.buttonBehav.greyedOut = !isHost;
             grid.Switch(!isHost);
 
             multiplayerPanel.UpdateLobbyHost(isHost);
@@ -227,9 +245,9 @@ namespace BingoMode.BingoMenu
             Dictionary<string, int> dictionary = new Dictionary<string, int>();
             Dictionary<string, List<string>> dictionary2 = new Dictionary<string, List<string>>();
             List<string> list2 = SlugcatStats.SlugcatStoryRegions(slug);
-            if (File.Exists(AssetManager.ResolveFilePath("randomstarts.txt")))
+            if (File.Exists(AssetManager.ResolveFilePath("bingorandomstarts.txt")))
             {
-                string[] array = File.ReadAllLines(AssetManager.ResolveFilePath("randomstarts.txt"));
+                string[] array = File.ReadAllLines(AssetManager.ResolveFilePath("bingorandomstarts.txt"));
                 for (int i = 0; i < array.Length; i++)
                 {
                     if (!array[i].StartsWith("//") && array[i].Length > 0)
@@ -288,12 +306,25 @@ namespace BingoMode.BingoMenu
                 }));
                 return text2;
             }
-            return "SU_S01";
+            return slug == WatcherEnums.SlugcatStatsName.Watcher ? "WSKB_S06" : "SU_S01";
         }
 
         public override void GrafUpdate(float timeStacker)
         {
             base.GrafUpdate(timeStacker);
+
+            nowPlaying.text = expMenu.characterSelect.nowPlaying.label.text;
+
+            if (title.element == watcherTitle && ExpeditionData.slugcatPlayer != Watcher.WatcherEnums.SlugcatStatsName.Watcher)
+            {
+                title.element = normalTitle;
+                title.shader = Custom.rainWorld.Shaders["MenuText"];
+            }
+            if (title.element == normalTitle && ExpeditionData.slugcatPlayer == Watcher.WatcherEnums.SlugcatStatsName.Watcher)
+            {
+                title.element = watcherTitle;
+                title.shader = Custom.rainWorld.Shaders["Basic"];
+            }
 
             title.SetPosition(DrawPos(timeStacker) + new Vector2(menu.manager.rainWorld.screenSize.x / 2f, menu.manager.rainWorld.screenSize.y - TITLE_MARGIN));
 
@@ -305,6 +336,7 @@ namespace BingoMode.BingoMenu
                     eggButton.symbolSprite.color = ((ExpeditionData.ints[num] == 2) ? new HSLColor(Mathf.Sin(expMenu.challengeSelect.colorCounter / 20f), 1f, 0.75f).rgb : new Color(0.3f, 0.3f, 0.3f));
                 }
             }
+
 
             MultiplayerSlide(timeStacker);
             RandomizerSlide(timeStacker);
@@ -366,9 +398,14 @@ namespace BingoMode.BingoMenu
                 foreach (var ch in ExpeditionData.challengeList)
                 {
                     if (ch is BingoNoRegionChallenge r) bannedRegions.Add(r.region.Value);
-                    if (ch is BingoAllRegionsExcept g) bannedRegions.Add(g.region.Value);
+                    if (ch is BingoAllRegionsExceptChallenge g) bannedRegions.Add(g.region.Value);
                     if (ch is BingoEnterRegionChallenge b) bannedRegions.Add(b.region.Value);
                     if (ch is BingoEnterRegionFromChallenge a) bannedRegions.Add(a.to.Value);
+
+                    // watcher touches this
+                    if (ch is WatcherBingoEnterRegionChallenge c) bannedRegions.Add(c.region.Value);
+                    if (ch is WatcherBingoNoRegionChallenge d) bannedRegions.Add(d.region.Value);
+                    if (ch is WatcherBingoAllRegionsExceptChallenge e) bannedRegions.Add(e.region.Value);
                 }
                 if (BingoData.BingoDen.ToLowerInvariant() == "random")
                 {
@@ -381,12 +418,13 @@ namespace BingoMode.BingoMenu
                     {
                         foreach (var banned in bannedRegions)
                         {
-                            if (bannedRegions.Count == ChallengeUtils.GetSortedCorrectListForChallenge("regionsreal").Length)
+                            
+                            if (bannedRegions.Count == ChallengeUtils.GetCorrectListForChallenge("regionsreal", true).Length)
                             {
                                 BingoData.BingoDen = "SU_S01";
                                 ExpeditionData.startingDen = "SU_S01";
                             }
-                            else if (ExpeditionData.startingDen.Substring(0, 2).ToLowerInvariant() == banned.ToLowerInvariant())
+                            else if (ExpeditionData.startingDen.Substring(0, ExpeditionData.slugcatPlayer == Watcher.WatcherEnums.SlugcatStatsName.Watcher ? 4 : 2).ToLowerInvariant() == banned.ToLowerInvariant())
                             {
                                 tries++;
                                 goto reset;

@@ -96,9 +96,11 @@ namespace BingoMode.BingoMenu
             set
             {
                 shelterSetting.greyedOut = !value;
+                shelterSetting.label.alpha = !value ? 0f : 1f;
                 plusButton.buttonBehav.greyedOut = !value;
                 minusButton.buttonBehav.greyedOut = !value;
                 pasteBoard.buttonBehav.greyedOut = !value;
+                copyBoard.buttonBehav.greyedOut = !value;
                 startGame.signalText = value ? "STARTBINGO" : "GETREADY";
                 startGame.menuLabel.text = value ? menu.Translate("BEGIN") : menu.Translate("I'M<LINE>READY").Replace("<LINE>", "\r\n");
             }
@@ -114,6 +116,11 @@ namespace BingoMode.BingoMenu
                 nallReady.label.alpha = 0f;
                 nallReady.label.color = Color.white;
             }
+        }
+
+        public string Shelter
+        {
+            get => shelterSetting.value; set => shelterSetting.value = value;
         }
 
         public GameControls(Menu.Menu menu, MenuObject owner, Vector2 pos, float anchorX = 0f, float anchorY = 0f) : base(menu, owner, pos)
@@ -259,12 +266,15 @@ namespace BingoMode.BingoMenu
             if (message == "COPYTOCLIPBOARD")
             {
                 UniClipboard.SetText(BingoHooks.GlobalBoard.ToString());
+                menu.PlaySound(SoundID.MENU_Next_Slugcat);
                 return;
             }
 
             if (message == "PASTEFROMCLIPBOARD")
             {
-                BingoHooks.GlobalBoard.FromString(UniClipboard.GetText());
+                bool success = BingoHooks.GlobalBoard.FromString(UniClipboard.GetText());
+                if (success) menu.PlaySound(SoundID.SS_AI_Give_The_Mark_Boom);
+                else menu.PlaySound(SoundID.Snail_Pop);
                 SteamTest.UpdateOnlineBingo();
                 return;
             }

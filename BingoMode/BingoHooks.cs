@@ -1,31 +1,37 @@
-﻿using Expedition;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using Expedition;
 using Menu;
 using Mono.Cecil.Cil;
 using MonoMod.Cil;
 using MoreSlugcats;
 using RWCustom;
 using Steamworks;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
 using UnityEngine;
+using Watcher;
 
 namespace BingoMode
 {
+    using System.IO;
+    using System.Net;
+    using System.Text.RegularExpressions;
     using BingoChallenges;
     using BingoHUD;
     using BingoMenu;
     using BingoSteamworks;
     using IL.JollyCoop.JollyMenu;
     using Music;
+    using static BingoMode.BingoSteamworks.LobbySettings;
 
     public class BingoHooks
     {
         public static BingoBoard GlobalBoard;
 
-        public static ConditionalWeakTable<ExpeditionMenu, BingoPage> bingoPage = new ();
-        public static ConditionalWeakTable<CharacterSelectPage, HoldButton> newBingoButton = new ();
+        public static ConditionalWeakTable<ExpeditionMenu, BingoPage> bingoPage = new();
+        public static ConditionalWeakTable<CharacterSelectPage, HoldButton> newBingoButton = new();
 
         public static float cantpresscounter;
 
@@ -109,7 +115,7 @@ namespace BingoMode
                         Challenge challenge = (Activator.CreateInstance(BingoData.availableBingoChallenges.Find((Challenge c) => c.GetType().Name == t).GetType()) as Challenge).Generate();
                         if (challenge != null)
                         {
-                            
+
                             if (!ExpeditionData.allChallengeLists.ContainsKey(name))
                             {
                                 ExpeditionData.allChallengeLists.Add(name, new List<Challenge>());
@@ -121,11 +127,17 @@ namespace BingoMode
                     catch (Exception ex)
                     {
                         Plugin.logger.LogError("Error while regenerating broken challenge, call that shit inception fr how did this happen: " + ex);
+                        string combined = "";
+                        foreach (string s in array11)
+                        {
+                            combined += s;
+                        }
+                        Plugin.logger.LogInfo(combined);
                         Challenge challenge = (Activator.CreateInstance(BingoData.availableBingoChallenges.Find((Challenge c) => c.GetType().Name == "BingoEatChallenge").GetType()) as Challenge).Generate();
                         //challenge.FromString(array11[1]);
                         if (challenge != null)
                         {
-                            
+
                             if (!ExpeditionData.allChallengeLists.ContainsKey(name))
                             {
                                 ExpeditionData.allChallengeLists.Add(name, []);
@@ -149,11 +161,23 @@ namespace BingoMode
 
         public static void Apply()
         {
+            if (ModManager.Watcher) WatcherBingoHooks.Apply();
             // Adding the bingo page to exp menu
             On.Menu.ExpeditionMenu.ctor += ExpeditionMenu_ctor;
             On.Menu.ExpeditionMenu.InitMenuPages += ExpeditionMenu_InitMenuPages;
             On.Menu.ExpeditionMenu.Singal += ExpeditionMenu_Singal;
             On.Menu.ExpeditionMenu.UpdatePage += ExpeditionMenu_UpdatePage;
+            IL.Menu.ExpeditionMenu.Update += ExpeditionMenu_Update_Speed;
+
+            // Add bingo to intro roll
+            On.Menu.IntroRoll.ctor += IntroRoll_ctor;
+
+            On.Menu.MenuScene.BuildScene += MenuScene_BuildScene;
+
+            // HOLY EGO (replace expedition button with bingo) (and replace background)
+            IL.Menu.MainMenu.ctor += MainMenu_ctor;
+            // HOLY EGO 2 (replace expedition word with bingo word)
+            On.Menu.CharacterSelectPage.ctor += CharacterSelectPage_ctor;
 
             // Adding new bingo button to the character select page
             //On.Menu.ChallengeSelectPage.Singal += ChallengeSelectPage_Singal;
@@ -176,11 +200,13 @@ namespace BingoMode
             // Unlocks butone
             On.Menu.UnlockDialog.Singal += UnlockDialog_Singal;
             On.Menu.UnlockDialog.Update += UnlockDialog_Update;
+            // Needs to be done to grey out multiple groups of perks over different pages
+            On.Menu.UnlockDialog.UpdateSelectables += UnlockDialog_UpdateSelectables;
 
             // Passage butone
             On.Menu.SleepAndDeathScreen.AddSubObjects += SleepAndDeathScreen_AddSubObjects;
 
-            // Saving and loaading shit
+            // Saving and loading shit
             On.Menu.CharacterSelectPage.AbandonButton_OnPressDone += CharacterSelectPage_AbandonButton_OnPressDone;
 
             // Preventing expedition antics
@@ -203,11 +229,16 @@ namespace BingoMode
             // No red karma 1 + vanilla echo fix
             IL.Menu.KarmaLadder.KarmaSymbol.Update += KarmaSymbol_UpdateIL;
 
+            // All cats unlocked because you're adults or smth
+            On.Expedition.ExpeditionProgression.CheckUnlocked += ExpeditionData_CheckUnlocked;
+
             // Shift the position of the kills in menu
             On.Menu.SleepAndDeathScreen.Update += SleepAndDeathScreen_Update;
 
-            // No force watch sleep screen
-            On.Menu.SleepAndDeathScreen.GetDataFromGame += SleepAndDeathScreen_GetDataFromGame;
+            // No force watch sleep screen ever
+            new MonoMod.RuntimeDetour.Hook(
+                typeof(SleepAndDeathScreen).GetProperty(nameof(SleepAndDeathScreen.ButtonsGreyedOut)).GetGetMethod(),
+                typeof(BingoHooks).GetMethod(nameof(SleepAndDeathScreen_getButtonsGreyedOut)));
 
             // One passage per game
             On.Menu.SleepAndDeathScreen.AddExpeditionPassageButton += SleepAndDeathScreen_AddExpeditionPassageButton;
@@ -231,7 +262,7 @@ namespace BingoMode
             On.Menu.ExpeditionMenu.Update += ExpeditionMenu_Update;
             if (!ModManager.ActiveMods.Any(x => x.id == "crs"))
             {
-                Plugin.logger.LogMessage("No CRS. Applying async audio loading");
+                //Plugin.logger.LogMessage("No CRS. Applying async audio loading");
                 IL.Music.MusicPiece.SubTrack.Update += SubTrack_Update;
             }
 
@@ -246,11 +277,6 @@ namespace BingoMode
 
             // Flabberghasted this never got unloaded
             On.Menu.Menu.ShutDownProcess += Menu_ShutDownProcess;
-        }
-
-        private static void HUD_InitFastTravelHud1(On.HUD.HUD.orig_InitFastTravelHud orig, HUD.HUD self, HUD.Map.MapData mapData)
-        {
-            throw new NotImplementedException();
         }
 
         private static void Menu_ShutDownProcess(On.Menu.Menu.orig_ShutDownProcess orig, Menu.Menu self)
@@ -349,12 +375,26 @@ namespace BingoMode
 
         private static void ExpeditionMenu_Update(On.Menu.ExpeditionMenu.orig_Update orig, ExpeditionMenu self)
         {
-            if (!self.muted && Plugin.PluginInstance.BingoConfig.PlayMenuSong.Value && self.manager.musicPlayer != null && self.currentPage == 4 && (self.manager.musicPlayer.song == null || self.manager.musicPlayer.song.name == ExpeditionData.menuSong))
+            if (!self.muted && Plugin.PluginInstance.BingoConfig.PlayMenuSong.Value && self.manager?.musicPlayer != null && self.currentPage == 4 && (self.manager.musicPlayer.song == null || self.manager.musicPlayer.song.name == ExpeditionData.menuSong))
             {
-                self.manager.musicPlayer.MenuRequestsSong("Bingo - Loops around the meattree", 1f, 1f);
+                if (self.manager.musicPlayer.song != null)
+                {
+                    self.manager.musicPlayer.song.StopAndDestroy();
+                    self.manager.musicPlayer.song = null;
+                }
+                if (ExpeditionData.slugcatPlayer == Watcher.WatcherEnums.SlugcatStatsName.Watcher)
+                {
+                    self.manager.musicPlayer.MenuRequestsSong("Bingo - Loops around the fast guy", 1f, 1f);
+                    self.characterSelect.nowPlaying.label.text = self.Translate("Now Playing:") + "  " + "Bingo, Intikus - Loops around the fast guy";
+                }
+                else
+                {
+                    self.manager.musicPlayer.MenuRequestsSong("Bingo - Loops around the meattree", 1f, 1f);
+                    self.characterSelect.nowPlaying.label.text = self.Translate("Now Playing:") + "  " + "Bingo, Intikus - Loops around the meattree";
+                }
             }
-
             orig.Invoke(self);
+
         }
 
         private static void FastTravelScreen_Singal(On.Menu.FastTravelScreen.orig_Singal orig, FastTravelScreen self, MenuObject sender, string message)
@@ -376,7 +416,7 @@ namespace BingoMode
             orig.Invoke(self, manager);
 
             if (BingoData.RandomStartingSeed == -1 || !BingoData.BingoMode || !BingoData.MultiplayerGame) return;
-            
+
             self.nextIssuedId = BingoData.RandomStartingSeed;
             BingoData.RandomStartingSeed = -1;
         }
@@ -440,7 +480,7 @@ namespace BingoMode
             if (!BingoData.CreateKarmaFlower || !self.room.abstractRoom.shelter) return;
             if (ExpeditionData.slugcatPlayer.value == "Saint")
             {
-                
+
                 AbstractSpear spear = new AbstractSpear(world, null, self.room.GetWorldCoordinate(self.mainBodyChunk.pos), self.room.game.GetNewID(), false, Mathf.Lerp(0.35f, 0.6f, Custom.ClampedRandomVariation(0.5f, 0.5f, 2f)));
                 self.room.abstractRoom.entities.Add(spear);
                 spear.RealizeInRoom();
@@ -448,7 +488,7 @@ namespace BingoMode
                 BingoData.CreateKarmaFlower = false;
                 return;
             }
-            
+
             AbstractConsumable karmaflow = new(world, AbstractPhysicalObject.AbstractObjectType.KarmaFlower, null, self.room.GetWorldCoordinate(self.mainBodyChunk.pos), self.room.game.GetNewID(), -1, -1, null);
             self.room.abstractRoom.entities.Add(karmaflow);
             karmaflow.RealizeInRoom();
@@ -501,32 +541,33 @@ namespace BingoMode
 
         private static void FastTravelScreen_Update(ILContext il)
         {
-           //ILCursor c = new(il);
-           //
-           //ILLabel label = null;
-           //if (c.TryGotoNext(MoveType.Before,
-           //    x => x.MatchBr(out label),
-           //    x => x.MatchLdarg(0),
-           //    x => x.MatchLdfld<MainLoopProcess>("manager"),
-           //    x => x.MatchLdsfld<ProcessManager.ProcessID>("MainMenu"),
-           //    x => x.MatchCallOrCallvirt<ProcessManager>("RequestMainProcessSwitch")
-           //    ))
-           //{
-           //    if (label == null) return;
-           //    c.Index += 1;
-           //    c.MoveAfterLabels();
-           //    c.EmitDelegate<Func<bool>>(() =>
-           //    {
-           //        if (BingoData.BingoMode) return true;
-           //        return false;
-           //    });
-           //    c.Emit(OpCodes.Brtrue, label);
-           //}
-           //else Plugin.logger.LogError("FastTravelScreen_Update FAILURE " + il);
+            //ILCursor c = new(il);
+            //
+            //ILLabel label = null;
+            //if (c.TryGotoNext(MoveType.Before,
+            //    x => x.MatchBr(out label),
+            //    x => x.MatchLdarg(0),
+            //    x => x.MatchLdfld<MainLoopProcess>("manager"),
+            //    x => x.MatchLdsfld<ProcessManager.ProcessID>("MainMenu"),
+            //    x => x.MatchCallOrCallvirt<ProcessManager>("RequestMainProcessSwitch")
+            //    ))
+            //{
+            //    if (label == null) return;
+            //    c.Index += 1;
+            //    c.MoveAfterLabels();
+            //    c.EmitDelegate<Func<bool>>(() =>
+            //    {
+            //        if (BingoData.BingoMode) return true;
+            //        return false;
+            //    });
+            //    c.Emit(OpCodes.Brtrue, label);
+            //}
+            //else Plugin.logger.LogError("FastTravelScreen_Update FAILURE " + il);
         }
 
         private static void SleepAndDeathScreen_AddExpeditionPassageButton(On.Menu.SleepAndDeathScreen.orig_AddExpeditionPassageButton orig, SleepAndDeathScreen self)
         {
+            if (self.RippleLadderMode) return;
             if (BingoData.BingoMode)
             {
                 bool available = false;
@@ -559,7 +600,7 @@ namespace BingoMode
 
                 if (data.hostID.GetSteamID64() == default)
                 {
-                    
+
                     foreach (Challenge challenge in ExpeditionData.challengeList)
                     {
                         if (!challenge.completed && challenge is BingoChallenge b && !b.TeamsFailed[SteamTest.team] && b.ReverseChallenge())
@@ -573,11 +614,11 @@ namespace BingoMode
                     Expedition.Expedition.coreFile.Save(false);
                     return;
                 }
-                
-                
+
+
                 if (data.hostID.GetSteamID64() == SteamTest.selfIdentity.GetSteamID64())
                 {
-                    
+
                     foreach (Challenge challenge in ExpeditionData.challengeList)
                     {
                         if (!challenge.completed && challenge is BingoChallenge b && b.ReverseChallenge())
@@ -601,7 +642,7 @@ namespace BingoMode
                     // Would like to pause game here and make button unpause
                     self.room.game.manager.ShowDialog(new InfoDialog(self.room.game.manager, BingoData.globalMenu.Translate("Trying to reconnect to the host.")));
                 }
-                
+
                 Custom.rainWorld.progression.currentSaveState.BringUpToDate(self.room.game);
                 Custom.rainWorld.progression.currentSaveState.denPosition = self.room.abstractRoom.name;
                 Custom.rainWorld.progression.SaveWorldStateAndProgression(false);
@@ -609,26 +650,17 @@ namespace BingoMode
             }
         }
 
-        private static void SleepAndDeathScreen_GetDataFromGame(On.Menu.SleepAndDeathScreen.orig_GetDataFromGame orig, SleepAndDeathScreen self, KarmaLadderScreen.SleepDeathScreenDataPackage package)
+        public static bool SleepAndDeathScreen_getButtonsGreyedOut(Func<SleepAndDeathScreen, bool> orig, SleepAndDeathScreen self)
         {
-            orig.Invoke(self, package);
-
-            if (BingoData.BingoMode)
-            {
-                self.forceWatchAnimation = false;
-
-                if (self.hud == null || self.hud.parts == null) return;
-                HUD.HudPart binguHUD = self.hud.parts.FirstOrDefault(x => x is BingoHUDMain);
-                if (binguHUD is BingoHUDMain hude)
-                {
-                    self.forceWatchAnimation = hude.queue.Count > 0 || hude.completeQueue.Count > 0;
-                }
-            }
+            return (!self.UsesWarpMap && self.FreezeMenuFunctions) || (self.UsesWarpMap && (self.RevealMap || self.FreezeMenuFunctions));
         }
 
         private static void SleepAndDeathScreen_Update(On.Menu.SleepAndDeathScreen.orig_Update orig, SleepAndDeathScreen self)
         {
             orig.Invoke(self);
+
+            //watchercondition
+            if (self.RippleLadderMode) return;
 
             if (!BingoData.BingoMode) return;
 
@@ -641,7 +673,6 @@ namespace BingoMode
             {
                 self.expPassage.buttonBehav.greyedOut = true;
             }
-
             if (self.hud == null || self.hud.parts == null || self.killsDisplay == null) return;
             HUD.HudPart binguHUD = self.hud.parts.FirstOrDefault(x => x is BingoHUDMain);
             if (binguHUD is BingoHUDMain hud)
@@ -676,7 +707,7 @@ namespace BingoMode
 
                     return orig;
                 });
-            } 
+            }
             else Plugin.logger.LogError("KarmaSymbol_UpdateIL 1 FAILURE " + il);
 
             //if (b.TryGotoNext(MoveType.After,
@@ -699,13 +730,18 @@ namespace BingoMode
             //else Plugin.logger.LogError("KarmaSymbol_UpdateIL 2 FAILURE " + il);
         }
 
+        public static bool ExpeditionData_CheckUnlocked(On.Expedition.ExpeditionProgression.orig_CheckUnlocked orig, ProcessManager manager, SlugcatStats.Name slugcat)
+        {
+            return true;
+        }
+
         private static void ShelterDoor_UpdatePathfindingCreatures(On.ShelterDoor.orig_UpdatePathfindingCreatures orig, ShelterDoor self)
         {
             orig.Invoke(self);
             if (!BingoData.BingoMode) return;
             if (BingoData.BingoSaves.ContainsKey(ExpeditionData.slugcatPlayer))
             {
-                if (BingoData.BingoSaves[ExpeditionData.slugcatPlayer].hostID.GetSteamID64() != default && 
+                if (BingoData.BingoSaves[ExpeditionData.slugcatPlayer].hostID.GetSteamID64() != default &&
                     BingoData.BingoSaves[ExpeditionData.slugcatPlayer].hostID.GetSteamID64() == SteamTest.selfIdentity.GetSteamID64())
                 {
                     SteamFinal.BroadcastCurrentBoardState();
@@ -873,9 +909,45 @@ namespace BingoMode
             }
         }
 
+        private static void UnlockDialog_UpdateSelectables(On.Menu.UnlockDialog.orig_UpdateSelectables orig, UnlockDialog self)
+        {
+            orig.Invoke(self);
+
+            if (BingoData.MultiplayerGame)
+            {
+                bool isHost = SteamMatchmaking.GetLobbyOwner(SteamTest.CurrentLobby) == SteamTest.selfIdentity.GetSteamID();
+                foreach (var perk in self.perkButtons)
+                {
+                    perk.buttonBehav.greyedOut = perk.buttonBehav.greyedOut || BingoData.globalSettings.perks == AllowUnlocks.None || (BingoData.globalSettings.perks == AllowUnlocks.Inherited && !isHost);
+                }
+                foreach (var burden in self.burdenButtons)
+                {
+                    burden.buttonBehav.greyedOut = burden.buttonBehav.greyedOut || BingoData.globalSettings.burdens == AllowUnlocks.None || (BingoData.globalSettings.burdens == AllowUnlocks.Inherited && !isHost);
+                }
+            }
+            string[] bannedBurdens = ["bur-doomed"];
+            string[] bannedPerks = ["unl-passage", "unl-karma"];
+            foreach (var bur in self.burdenButtons)
+            {
+                if (bannedBurdens.Contains(bur.signalText))
+                {
+                    bur.buttonBehav.greyedOut = true;
+                    if (ExpeditionGame.activeUnlocks.Contains(bur.signalText)) self.ToggleBurden(bur.signalText);
+                }
+            }
+            foreach (var per in self.perkButtons)
+            {
+                if (bannedPerks.Contains(per.signalText))
+                {
+                    per.buttonBehav.greyedOut = true;
+                    if (ExpeditionGame.activeUnlocks.Contains(per.signalText)) self.ToggleBurden(per.signalText);
+                }
+            }
+        }
+
         public static void ChallengeSelectPage_SetUpSelectables(On.Menu.ChallengeSelectPage.orig_SetUpSelectables orig, ChallengeSelectPage self)
         {
-            if (self.menu.currentPage == 4) return;
+            if (self?.menu?.currentPage != null && self.menu.currentPage == 4) return;
             orig.Invoke(self);
         }
 
@@ -890,7 +962,7 @@ namespace BingoMode
             {
                 b.EmitDelegate(() =>
                 {
-                    if (BingoData.BingoMode) 
+                    if (BingoData.BingoMode)
                     {
                         ExpeditionGame.expeditionComplete = false;//GlobalBoard.CheckWin();
                     }
@@ -956,6 +1028,7 @@ namespace BingoMode
             BingoData.MultiplayerGame = false;
             SteamTest.team = 0;
             BingoData.BingoDen = "random";
+            BingoData.normalBingoBoard = "Red;BingoDodgeLeviathanChallenge~0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|3|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|4|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|2|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|2|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|6|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|4|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|3|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|4|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|7|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|2|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|3|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|7|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|CyanLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|6|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|CyanLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|9|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|CyanLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|2|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|CyanLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|3|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|3|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|3|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|2|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|4|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|CyanLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|2|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|CyanLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|2|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|CyanLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|4|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|CyanLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|3|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|4|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|10|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|2|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|5|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|2|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|6|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|3|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|2|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|5|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|3|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|3|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|4|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|2|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|4|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|4|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|3|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|5|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|8|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|2|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|4|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|4|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|8|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|3|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|2|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|2|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoKillChallenge~System.String|RedLizard|Creature Type|0|creatures><System.String|Any Weapon|Weapon Used|6|weaponsnojelly><System.Int32|2|Amount|1|NULL><0><System.String|Any Region|Region|5|regions><System.Boolean|false|In one Cycle|3|NULL><System.Boolean|false|Via a Death Pit|7|NULL><System.Boolean|false|While Starving|2|NULL><System.Boolean|false|While under mushroom effect|8|NULL><0><0bChGBingoDodgeLeviathanChallenge~0><0bChGBingoDodgeLeviathanChallenge~0><0";
             SteamFinal.ConnectedPlayers.Clear();
             SteamFinal.ReceivedPlayerUpKeep.Clear();
             SteamFinal.SendUpKeepCounter = SteamFinal.PlayerUpkeepTime;
@@ -978,7 +1051,6 @@ namespace BingoMode
             bingoPage.TryGetValue(self, out var page);
             self.pages[4].subObjects.Add(page);
             self.pages[4].pos.x -= 1500f;
-           // 
         }
 
         public static void ExpeditionMenu_Singal(On.Menu.ExpeditionMenu.orig_Singal orig, ExpeditionMenu self, MenuObject sender, string message)
@@ -1064,7 +1136,7 @@ namespace BingoMode
                 SteamFinal.TryToReconnect = true;
                 SteamFinal.HostUpkeep = 0;
             }
-            
+
             int size = BingoData.BingoSaves[ExpeditionData.slugcatPlayer].size;
             GlobalBoard.size = size;
             GlobalBoard.challengeGrid = new Challenge[size, size];
@@ -1090,6 +1162,9 @@ namespace BingoMode
         {
             if (pageIndex == 4)
             {
+                self.exitButton.RemoveSubObject(self.exitButton);
+                self.exitButton = new SimpleButton(self, self.pages[self.currentPage], self.Translate("BACK"), "EXIT", new Vector2(self.leftAnchor + 50f, 695f), new Vector2(100f, 30f));
+
                 if (bingoPage.TryGetValue(self, out var page))
                 {
                     self.selectedObject = page.grid;
@@ -1098,6 +1173,119 @@ namespace BingoMode
             }
 
             orig.Invoke(self, pageIndex);
+        }
+
+        public static void ExpeditionMenu_Update_Speed(ILContext il)
+        {
+            ILCursor c = new ILCursor(il);
+
+            if (c.TryGotoNext(MoveType.After,
+                x => x.MatchCall(typeof(Mathf), nameof(Mathf.Lerp)
+                )))
+            {
+                c.Emit(OpCodes.Ldc_R4, 2f);
+
+                c.Emit(OpCodes.Mul);
+            }
+            else Plugin.logger.LogError("ExpeditionMenu_Update_Speed broked " + il);
+
+        }
+
+        private static void IntroRoll_ctor(On.Menu.IntroRoll.orig_ctor orig, IntroRoll self, ProcessManager manager)
+        {
+            orig.Invoke(self, manager);
+
+            //string folder = $"illustrations{Path.DirectorySeparatorChar}intro_roll";
+
+            //self.illustrations[2].RemoveSprites();
+            //self.pages[0].subObjects.Remove(self.illustrations[2]);
+
+            //self.illustrations[2] = new MenuIllustration(self, self.pages[0], folder, ModManager.Watcher ? "intro_roll_b_bingo_watcher" : "intro_roll_b_bingo", new Vector2(0f, 0f), true, false);
+
+            //self.pages[0].subObjects.Add(self.illustrations[2]);
+        }
+
+        private static void MenuScene_BuildScene(On.Menu.MenuScene.orig_BuildScene orig, Menu.MenuScene self)
+        {
+            orig.Invoke(self);
+            if (self.sceneID == null || self.sceneID != BingoEnums.MainMenu_Bingo) return;
+
+            self.blurMin = -0.2f;
+            self.blurMax = 0.4f;
+
+            if (ModManager.Watcher)
+            {
+                string folder = $"scenes{Path.DirectorySeparatorChar}main menu - bingo watcher";
+
+                self.sceneFolder = folder;
+            
+                if (self.flatMode)
+                {
+                    self.AddIllustration(new MenuIllustration(self.menu, self, folder, "bingo - flat", new Vector2(683f, 384f), false, true));
+                }
+                else
+                {
+                    self.AddIllustration(new MenuDepthIllustration(self.menu, self, folder, "bingo - 6", new Vector2(-137f, -89f), 9f, MenuDepthIllustration.MenuShader.Normal));
+                    self.AddIllustration(new MenuDepthIllustration(self.menu, self, folder, "bingo - 5", new Vector2(187f, -78f), 6f, MenuDepthIllustration.MenuShader.Normal));
+                    self.AddIllustration(new MenuDepthIllustration(self.menu, self, folder, "bingo - 4", new Vector2(161f, 36f), 3f, MenuDepthIllustration.MenuShader.Normal));
+                    self.AddIllustration(new MenuDepthIllustration(self.menu, self, folder, "bingo - 3", new Vector2(313f, 29f), 4f, MenuDepthIllustration.MenuShader.Normal));
+                    self.AddIllustration(new MenuDepthIllustration(self.menu, self, folder, "bingo - 2", new Vector2(364f, 42f), 2.5f, MenuDepthIllustration.MenuShader.Lighten));
+                    self.AddIllustration(new MenuDepthIllustration(self.menu, self, folder, "bingo - 1", new Vector2(-137f, -89f), 2f, MenuDepthIllustration.MenuShader.Normal));
+                }
+            }
+            else
+            {
+                string folder = $"Scenes{Path.DirectorySeparatorChar}main menu - bingo";
+
+                self.sceneFolder = folder;
+
+                if (self.flatMode)
+                {
+                    self.AddIllustration(new MenuIllustration(self.menu, self, folder, "bingo - flat", new Vector2(683f, 384f), false, true));
+                }
+                else
+                {
+                    self.AddIllustration(new MenuDepthIllustration(self.menu, self, folder, "bingo - 8", new Vector2(-117f, -112f), 8f, MenuDepthIllustration.MenuShader.Normal));
+                    self.AddIllustration(new MenuDepthIllustration(self.menu, self, folder, "bingo - 7", new Vector2(305f, -24f), 6f, MenuDepthIllustration.MenuShader.Normal));
+                    self.AddIllustration(new MenuDepthIllustration(self.menu, self, folder, "bingo - 6", new Vector2(119f, 256f), 4f, MenuDepthIllustration.MenuShader.Lighten));
+                    self.AddIllustration(new MenuDepthIllustration(self.menu, self, folder, "bingo - 5", new Vector2(304f, 254f), 3f, MenuDepthIllustration.MenuShader.Lighten));
+                    self.AddIllustration(new MenuDepthIllustration(self.menu, self, folder, "bingo - 4", new Vector2(334f, 225f), 2.5f, MenuDepthIllustration.MenuShader.Lighten));
+                    self.AddIllustration(new MenuDepthIllustration(self.menu, self, folder, "bingo - 3", new Vector2(680f, 15f), 4f, MenuDepthIllustration.MenuShader.Normal));
+                    self.AddIllustration(new MenuDepthIllustration(self.menu, self, folder, "bingo - 2", new Vector2(-126f, -138f), 4f, MenuDepthIllustration.MenuShader.Normal));
+                }
+            }
+        }
+
+        private static void MainMenu_ctor(ILContext il)
+        {
+            ILCursor c = new ILCursor(il);
+
+            //if (c.TryGotoNext(MoveType.Before,
+            //    x => x.MatchNewobj(typeof(InteractiveMenuScene))))
+            //{
+            //    c.Index--;
+            //    c.Remove();
+            //    var field = typeof(BingoEnums).GetField(nameof(BingoEnums.MainMenu_Bingo));
+            //    c.Emit(OpCodes.Ldsfld, field);
+            //}
+            //else Plugin.logger.LogError("BingoMainMenuBackgroundReplacement broked " + il);
+
+            if (c.TryGotoNext(MoveType.Before,
+                x => x.MatchLdstr("EXPEDITION"),
+                x => x.MatchCallOrCallvirt("Menu.Menu", "Translate")))
+            {
+                c.Next.Operand = "BINGO";
+            }
+            else Plugin.logger.LogError("BingoExpeditionButtonReplacement broked " + il);
+
+        }
+
+        private static void CharacterSelectPage_ctor(On.Menu.CharacterSelectPage.orig_ctor orig, CharacterSelectPage self, Menu.Menu menu, MenuObject owner, Vector2 pos)
+        {
+            orig.Invoke(self, menu, owner, pos);
+
+            FAtlasElement title = Futile.atlasManager.GetElementWithName("bingotitle");
+            self.pageTitle.element = title;
         }
 
         // Creating butone
@@ -1112,14 +1300,13 @@ namespace BingoMode
                 bool isSpectator = BingoData.BingoSaves[ExpeditionData.slugcatPlayer].team == 8;
                 if (saveGameData == null)
                 {
-                    
                     BingoData.BingoSaves.Remove(ExpeditionData.slugcatPlayer);
                     goto invok;
                 }
                 self.slugcatDescription.text = "";
                 if (!newBingoButton.TryGetValue(self, out _))
                 {
-                    newBingoButton.Add(self, new HoldButton(self.menu, self, isSpectator ? self.menu.Translate("CONTINUE<LINE>SPECTATING").Replace("<LINE>", "\r\n") : isMultiplayer ? self.menu.Translate("CONTINUE<LINE>MULTIPLAYER").Replace("<LINE>", "\r\n") : self.menu.Translate("CONTINUE<LINE>BINGO").Replace("<LINE>", "\r\n"), self.menu.Translate("LOADBINGO"), new Vector2(680f, 210f), 30f));
+                    newBingoButton.Add(self, new HoldButton(self.menu, self, isSpectator ? self.menu.Translate("CONTINUE<LINE>SPECTATING").Replace("<LINE>", "\r\n") : isMultiplayer ? self.menu.Translate("CONTINUE<LINE>MULTIPLAYER").Replace("<LINE>", "\r\n") : self.menu.Translate("CONTINUE<LINE>BINGO").Replace("<LINE>", "\r\n"), "LOADBINGO", new Vector2(680f, 210f), 30f));
                 }
                 newBingoButton.TryGetValue(self, out var bb);
                 self.subObjects.Add(bb);
@@ -1131,11 +1318,27 @@ namespace BingoMode
             orig.Invoke(self);
 
             if (saveGameData != null) return;
-            self.confirmExpedition.pos.x += 90;
-
-            if (!newBingoButton.TryGetValue(self, out _))
+            if (ExpeditionData.slugcatPlayer == WatcherEnums.SlugcatStatsName.Watcher)
             {
-                newBingoButton.Add(self, new HoldButton(self.menu, self, self.menu.Translate("PLAY<LINE>BINGO").Replace("<LINE>", "\r\n"), "NEWBINGO", new Vector2(590f, 180f), 30f));
+                if (self.confirmExpedition != null)
+                {
+                    self.confirmExpedition.RemoveSprites();
+                    self.confirmExpedition.RemoveSubObject(self.confirmExpedition);
+                }
+
+                if (!newBingoButton.TryGetValue(self, out _))
+                {
+                    newBingoButton.Add(self, new HoldButton(self.menu, self, self.menu.Translate("PLAY<LINE>BINGO").Replace("<LINE>", "\r\n"), "NEWBINGO", new Vector2(680f, 180f), 30f));
+                }
+            }
+            else
+            {
+                self.confirmExpedition.pos.x += 90;
+
+                if (!newBingoButton.TryGetValue(self, out _))
+                {
+                    newBingoButton.Add(self, new HoldButton(self.menu, self, self.menu.Translate("PLAY<LINE>BINGO").Replace("<LINE>", "\r\n"), "NEWBINGO", new Vector2(590f, 180f), 30f));
+                }
             }
             newBingoButton.TryGetValue(self, out var button);
             self.subObjects.Add(button);

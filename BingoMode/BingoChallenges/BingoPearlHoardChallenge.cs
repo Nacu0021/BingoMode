@@ -88,7 +88,7 @@ namespace BingoMode.BingoChallenges
         public override Phrase ConstructPhrase()
         {
             Phrase phrase = anyShelter.Value ?
-                new Phrase([[common.Value ? Icon.PEARL_HOARD_NORMAL : Icon.PEARL_HOARD_COLOR, new Icon("singlearrow"), new Icon("doubleshelter")]]) :
+                new Phrase([[common.Value ? Icon.PEARL_HOARD_NORMAL : Icon.PEARL_HOARD_COLOR, new Icon(Plugin.PluginInstance.BingoConfig.FillIcons.Value ? "keyShiftB" : "keyShiftA", 1f, Color.white, 90), new Icon("doubleshelter")]]) :
                 new Phrase([[new Icon("ShelterMarker"), common.Value ? Icon.PEARL_HOARD_NORMAL : Icon.PEARL_HOARD_COLOR]]);
             phrase.InsertWord(new Counter(current, amount.Value), 1);
             if (region.Value != "Any Region")
@@ -115,13 +115,7 @@ namespace BingoMode.BingoChallenges
             {
                 flag = true;
             }
-            string[] array = SlugcatStats.SlugcatStoryRegions(ExpeditionData.slugcatPlayer).ToArray();
-            if (array.Contains("HR"))
-            {
-                List<string> list = array.ToList<string>();
-                list.Remove("HR");
-                array = list.ToArray();
-            }
+            string[] array = ChallengeUtils.GetCorrectListForChallenge("regionsreal");
             bool spec = UnityEngine.Random.value < 0.5f;
             string region = spec ? "Any Region" : array[UnityEngine.Random.Range(0, array.Length)];
             return new BingoPearlHoardChallenge
@@ -262,30 +256,16 @@ namespace BingoMode.BingoChallenges
             try
             {
                 string[] array = Regex.Split(args, "><");
-                if (array.Length == 8)
-                {
-                    common = SettingBoxFromString(array[0]) as SettingBox<bool>;
-                    anyShelter = SettingBoxFromString(array[1]) as SettingBox<bool>;
-                    current = int.Parse(array[2], NumberStyles.Any, CultureInfo.InvariantCulture);
-                    amount = SettingBoxFromString(array[3]) as SettingBox<int>;
-                    region = SettingBoxFromString(array[4]) as SettingBox<string>;
-                    completed = (array[5] == "1");
-                    revealed = (array[6] == "1");
-                    string[] arr = Regex.Split(array[7], "cLtD");
-                    collected = [.. arr];
-                }
-                // Legacy board pearl hoard challenge compatibility
-                else
-                {
-                    common = SettingBoxFromString(array[0]) as SettingBox<bool>;
-                    amount = SettingBoxFromString(array[1]) as SettingBox<int>;
-                    region = SettingBoxFromString(array[2]) as SettingBox<string>;
-                    completed = (array[3] == "1");
-                    revealed = (array[4] == "1");
-                    anyShelter = SettingBoxFromString("System.Boolean|false|Any Shelter|2|NULL") as SettingBox<bool>;
-                    collected = [];
-                }
-                    UpdateDescription();
+                common = SettingBoxFromString(array[0]) as SettingBox<bool>;
+                anyShelter = SettingBoxFromString(array[1]) as SettingBox<bool>;
+                current = int.Parse(array[2], NumberStyles.Any, CultureInfo.InvariantCulture);
+                amount = SettingBoxFromString(array[3]) as SettingBox<int>;
+                region = SettingBoxFromString(array[4]) as SettingBox<string>;
+                completed = (array[5] == "1");
+                revealed = (array[6] == "1");
+                string[] arr = Regex.Split(array[7], "cLtD");
+                collected = [.. arr];
+                UpdateDescription();
             }
             catch (Exception ex)
             {

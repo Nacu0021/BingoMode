@@ -2,6 +2,8 @@
 using BingoMode.BingoSteamworks;
 using Expedition;
 using MoreSlugcats;
+using On;
+using On.Watcher;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -82,6 +84,8 @@ namespace BingoMode.BingoChallenges
         public SettingBox<bool> oneCycle;
         public SettingBox<bool> shrooms;
 
+        public List<CreatureTemplate.Type> allowedSmallCrits;
+
         public BingoKillChallenge()
         {
             crit = new("", "Creature Type", 0, listName: "creatures");
@@ -92,6 +96,13 @@ namespace BingoMode.BingoChallenges
             weapon = new("", "Weapon Used", 6, listName: "weaponsnojelly");
             deathPit = new(false, "Via a Death Pit", 7);
             shrooms = new(false, "While under mushroom effect", 8);
+
+            allowedSmallCrits = new List<CreatureType>
+            {
+                Watcher.WatcherEnums.CreatureTemplateType.SandGrub,
+                Watcher.WatcherEnums.CreatureTemplateType.BigSandGrub,
+                Watcher.WatcherEnums.CreatureTemplateType.FireSprite
+            };
         }
 
         public override void UpdateDescription()
@@ -141,7 +152,7 @@ namespace BingoMode.BingoChallenges
             }
 
             phrase.InsertWord(new Counter(current, amount.Value), lastLine);
-            if (starve.Value) phrase.InsertWord(new Icon("Multiplayer_Death"), lastLine);
+            if (starve.Value) phrase.InsertWord(new Icon("MartyrB"), lastLine);
             if (oneCycle.Value) phrase.InsertWord(new Icon("cycle_limit"), lastLine);
             if (shrooms.Value) phrase.InsertWord(Icon.FromEntityName("Mushroom"), lastLine);
             return phrase;
@@ -168,8 +179,9 @@ namespace BingoMode.BingoChallenges
             bool starvv = UnityEngine.Random.value < 0.1f;
             if (onePiece || starvv) num = Mathf.CeilToInt(num / 2);
             num = Mathf.Max(2, num);
-            List<string> clone = ChallengeUtils.Weapons.ToList();
-            clone.RemoveAll(x => x == "PuffBall" || x == "Rock" || x == "JellyFish");
+            List<string> clone = ChallengeUtils.GetCorrectListForChallenge("weapons").ToList();
+            // watcher touches this
+            clone.RemoveAll(x => x == "PuffBall" || x == "Rock" || x == "JellyFish" || x == "Boomerang" || x == "Frog" || x == "GraffitiBomb");
             bool doWeapon = UnityEngine.Random.value < 0.5f;
             bool doCreature = !doWeapon || UnityEngine.Random.value < 0.8f;
             string weapo = doWeapon ? "Any Weapon" : clone[UnityEngine.Random.Range(0, clone.Count - (ModManager.MSC ? 0 : 1))];
@@ -194,7 +206,7 @@ namespace BingoMode.BingoChallenges
         public override void Update()
         {
             base.Update();
-            if (!completed && oneCycle.Value && game != null && game.cameras.Length > 0 && game.cameras[0].room != null && game.cameras[0].room.shelterDoor != null && game.cameras[0].room.shelterDoor.IsClosing)
+            if (!completed && oneCycle.Value && this.game?.cameras[0]?.room?.shelterDoor != null && this.game.cameras[0].room.shelterDoor.IsClosing)
             {
                 if (current != 0)
                 {
@@ -207,7 +219,7 @@ namespace BingoMode.BingoChallenges
 
         public void DeathPit(Creature c, Player p)
         {
-            if (c.Template.smallCreature || !deathPit.Value || TeamsCompleted[SteamTest.team] || hidden || completed || game == null || c == null || revealed || !CritInLocation(c)) return;
+            if ((c.Template.smallCreature && !(allowedSmallCrits.Contains(c.Template.type))) || !deathPit.Value || TeamsCompleted[SteamTest.team] || hidden || completed || game == null || c == null || revealed || !CritInLocation(c)) return;
             if (starve.Value && !p.Malnourished || shrooms.Value && p.mushroomCounter == 0) return;
             string type = c.abstractCreature.creatureTemplate.type.value;
             bool flag = crit != null && (
@@ -329,36 +341,17 @@ namespace BingoMode.BingoChallenges
             try
             {
                 string[] array = Regex.Split(args, "><");
-                if (array[8].Contains("mushroom"))
-                {
-                    crit = SettingBoxFromString(array[0]) as SettingBox<string>;
-                    weapon = SettingBoxFromString(array[1]) as SettingBox<string>;
-                    amount = SettingBoxFromString(array[2]) as SettingBox<int>;
-                    current = int.Parse(array[3], NumberStyles.Any, CultureInfo.InvariantCulture);
-                    region = SettingBoxFromString(array[4]) as SettingBox<string>;
-                    oneCycle = SettingBoxFromString(array[5]) as SettingBox<bool>;
-                    deathPit = SettingBoxFromString(array[6]) as SettingBox<bool>;
-                    starve = SettingBoxFromString(array[7]) as SettingBox<bool>;
-                    shrooms = SettingBoxFromString(array[8]) as SettingBox<bool>;
-                    completed = (array[9] == "1");
-                    revealed = (array[10] == "1");
-                }
-                else
-                {
-                    crit = SettingBoxFromString(array[0]) as SettingBox<string>;
-                    weapon = SettingBoxFromString(array[1]) as SettingBox<string>;
-                    amount = SettingBoxFromString(array[2]) as SettingBox<int>;
-                    current = int.Parse(array[3], NumberStyles.Any, CultureInfo.InvariantCulture);
-                    region = SettingBoxFromString(array[4]) as SettingBox<string>;
-                    //subregion = SettingBoxFromString(array[5]) as SettingBox<string>;
-                    oneCycle = SettingBoxFromString(array[6]) as SettingBox<bool>;
-                    deathPit = SettingBoxFromString(array[7]) as SettingBox<bool>;
-                    starve = SettingBoxFromString(array[8]) as SettingBox<bool>;
-                    shrooms = SettingBoxFromString("System.Boolean|false|While under mushroom effect|8|NULL") as SettingBox<bool>;
-                    completed = (array[9] == "1");
-                    revealed = (array[10] == "1");
-                }
-
+                crit = SettingBoxFromString(array[0]) as SettingBox<string>;
+                weapon = SettingBoxFromString(array[1]) as SettingBox<string>;
+                amount = SettingBoxFromString(array[2]) as SettingBox<int>;
+                current = int.Parse(array[3], NumberStyles.Any, CultureInfo.InvariantCulture);
+                region = SettingBoxFromString(array[4]) as SettingBox<string>;
+                oneCycle = SettingBoxFromString(array[5]) as SettingBox<bool>;
+                deathPit = SettingBoxFromString(array[6]) as SettingBox<bool>;
+                starve = SettingBoxFromString(array[7]) as SettingBox<bool>;
+                shrooms = SettingBoxFromString(array[8]) as SettingBox<bool>;
+                completed = (array[9] == "1");
+                revealed = (array[10] == "1");
                 UpdateDescription();
             }
             catch (Exception ex)
@@ -375,7 +368,7 @@ namespace BingoMode.BingoChallenges
 
         public override void CreatureKilled(Creature c, int playerNumber)
         {
-            if (c.Template.smallCreature || deathPit.Value || TeamsCompleted[SteamTest.team] || hidden || completed || game == null || c == null || revealed) return;
+            if ((c.Template.smallCreature && !(allowedSmallCrits.Contains(c.Template.type))) || deathPit.Value || TeamsCompleted[SteamTest.team] || hidden || completed || game == null || c == null || revealed) return;
             if (!CreatureHitByDesired(c)) return;
             if (!CritInLocation(c)) return;
             if (game.Players != null && game.Players.Count > 0 && game.Players[playerNumber].realizedCreature is Player p && ((starve.Value && !p.Malnourished) || (shrooms.Value && p.mushroomCounter == 0))) return;
@@ -403,7 +396,7 @@ namespace BingoMode.BingoChallenges
             if (weapon.Value == "Any Weapon") return true;
             if (BingoData.hitTimeline.TryGetValue(c.abstractCreature.ID, out var list))
             {
-                if (list.Last(x => list.IndexOf(x) != -1 && list.IndexOf(x) > (list.Count - 2)) == new ItemType(weapon.Value)) return true;
+                if (list.Last(x => list.IndexOf(x) != -1 && list.IndexOf(x) > (list.Count - 2)) == weapon.Value) return true;
             }
             return false;
         }

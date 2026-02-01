@@ -1,22 +1,31 @@
-﻿using Expedition;
-using ItemType = AbstractPhysicalObject.AbstractObjectType;
-using CreatureType = CreatureTemplate.Type;
-using MSCItemType = MoreSlugcats.MoreSlugcatsEnums.AbstractObjectType;
-using DLCItemType = DLCSharedEnums.AbstractObjectType;
+﻿using System;
 using System.Collections.Generic;
-using MoreSlugcats;
-using System.Linq;
-using UnityEngine;
-using System;
-using System.IO;
-using RWCustom;
 using System.Data.SqlTypes;
+using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
+using Expedition;
+using MoreSlugcats;
+using RWCustom;
+using UnityEngine;
+using Watcher;
+using CreatureType = CreatureTemplate.Type;
+using DLCItemType = DLCSharedEnums.AbstractObjectType;
+using ItemType = AbstractPhysicalObject.AbstractObjectType;
+using MSCItemType = MoreSlugcats.MoreSlugcatsEnums.AbstractObjectType;
+using WatcherItemType = Watcher.WatcherEnums.AbstractObjectType;
 
 namespace BingoMode.BingoChallenges
 {
     public static class ChallengeUtils
     {
         public static Dictionary<string, Dictionary<string, Vector2>> BingoVistaLocations;
+        public static string[] AllGates = [];
+        public static string[] AllEnterableRegions = [];
+        public static List<string> watcherRegions;
+        public static List<string> watcherSTSpots;
+        public static List<string> watcherPortals;
+        public static List<string> watcherDWTSpots;
 
         public static void Apply()
         {
@@ -31,49 +40,10 @@ namespace BingoMode.BingoChallenges
         {
             orig.Invoke(self);
 
-            GenerateBingoVistaLocations();
-        }
-
-        public static void GenerateBingoVistaLocations()
-        {
             BingoVistaLocations = ChallengeTools.VistaLocations.ToDictionary(x => x.Key, x => x.Value);
-            foreach (string text in Custom.rainWorld.progression.regionNames)
+            if (watcherRegions == null)
             {
-                if (!BingoVistaLocations.ContainsKey(text))
-                {
-                    BingoVistaLocations[text] = new Dictionary<string, Vector2>();
-                }
-                string path = AssetManager.ResolveFilePath(Path.Combine("world", text, "bingovistas.txt"));
-                //if (File.Exists(path))
-                //{
-                //    string[] lines = File.ReadAllLines(path);
-                //    for (int i = 0; i < lines.Length; i++)
-                //    {
-                //        string text2 = lines[i];
-                //        if (string.IsNullOrEmpty(text2.Trim())) continue;
-                //        if (text2.StartsWith("(MSC)"))
-                //        {
-                //            if (!ModManager.MSC) continue;
-                //            text2 = text2.Substring(5);
-                //        }
-
-                //        string[] array2 = text2.Split(',');
-                //        if (array2.Length >= 3)
-                //        {
-                //            string text3 = array2[0];
-                //            int num;
-                //            int num2;
-                //            if (string.IsNullOrEmpty(text3) || !int.TryParse(array2[1], out num) || !int.TryParse(array2[2], out num2))
-                //            {
-                //                Custom.LogWarning("Failed to parse bingo vista " + text2);
-                //            }
-                //            else
-                //            {
-                //                BingoVistaLocations[text][text3] = new Vector2((float)num, (float)num2);
-                //            }
-                //        }
-                //    }
-                //}
+                PopulateWatcherData();
             }
         }
 
@@ -101,6 +71,7 @@ namespace BingoMode.BingoChallenges
             return color;
         }
 
+        // watcher touches this
         private static int GetIconIntData(string thing) => thing switch
         {
             "Centipede" => 2,
@@ -108,6 +79,8 @@ namespace BingoMode.BingoChallenges
             "FireSpear" => 1,
             "ElectricSpear" => 2,
             "HellSpear" => 3,
+            "AltSkyWhale" => 1,
+            "ProtoLizard" => 2,
             _ => 0
         };
 
@@ -117,10 +90,12 @@ namespace BingoMode.BingoChallenges
             "FireSpear" => "Spear",
             "ElectricSpear" => "Spear",
             "HellSpear" => "Spear",
+            "AltSkyWhale" => "SkyWhale",
+            "ProtoLizard" => "IndigoLizard",
             _ => thing
         };
 
-        public static string[] GetCorrectListForChallenge(string listName)
+        public static string[] GetCorrectListForChallenge(string listName, bool sorted = false)
         {
             string ln = listName;
             //bool addEmpty = false;
@@ -131,59 +106,36 @@ namespace BingoMode.BingoChallenges
             //}
             switch (ln)
             {
-                case "transport": return Transportable;
-                case "pin": return ["Any Creature", .. Pinnable];
-                case "tolls": return BombableOutposts;
-                case "food": return FoodTypes;
-                case "weapons": return Weapons;
-                case "weaponsnojelly": return [.. Weapons.Where(x => x != "JellyFish")];
-                case "theft": return [.. StealableStolable, "DataPearl"];
-                case "ban": return Bannable;
-                case "friend": return Befriendable;
-                case "pearls": return CollectablePearls;
-                case "craft": return CraftableItems;
-                case "regions": return ["Any Region", .. SlugcatStats.SlugcatStoryRegions(ExpeditionData.slugcatPlayer).Where(x => x.ToLowerInvariant() != "hr"), .. SlugcatStats.SlugcatOptionalRegions(ExpeditionData.slugcatPlayer)];
-                case "regionsreal": return [.. SlugcatStats.SlugcatStoryRegions(ExpeditionData.slugcatPlayer).Where(x => x.ToLowerInvariant() != "hr"), .. SlugcatStats.SlugcatOptionalRegions(ExpeditionData.slugcatPlayer)];
-                case "echoes": return [.. GhostWorldPresence.GhostID.values.entries.Where(x => x != "NoGhost")];
-                case "creatures": return ["Any Creature", .. CreatureType.values.entries.Where(x => ChallengeTools.creatureSpawns[ExpeditionData.slugcatPlayer.value].Any(g => g.creature.value == x))];
-                case "depths": return Depthable;
-                case "banitem": return [.. FoodTypes, .. Bannable];
-                case "unlocks": return [.. BingoData.possibleTokens[0], .. BingoData.possibleTokens[1], .. BingoData.possibleTokens[2], .. BingoData.possibleTokens[3]];
-                case "chatlogs": return [.. BingoData.possibleTokens[4]];
-                case "passage": return [.. WinState.EndgameID.values.entries.Where(x => x != "Mother" && x != "Gourmand")];
-                case "expobject": return Storable;
-                case "vista": // hate
-                    List<ValueTuple<string, string>> list = new List<ValueTuple<string, string>>();
-                    foreach (KeyValuePair<string, Dictionary<string, Vector2>> keyValuePair in BingoVistaLocations)
-                    {
-                        if (GetSortedCorrectListForChallenge("regionsreal").Contains(keyValuePair.Key))
-                        {
-                            foreach (KeyValuePair<string, Vector2> keyValuePair2 in keyValuePair.Value)
-                            {
-                                list.Add(new ValueTuple<string, string>(keyValuePair.Key, keyValuePair2.Key));
-                            }
-                        }
-                    }
-                    List<string> strings = [];
-                    for (int i = 0; i < list.Count; i++)
-                    {
-                        strings.Add(list[i].Item2);
-                    }
-                    return strings.ToArray();
+                case "transport": return ChallengeUtilsFiltering.GetFilteredList("transport", Transportable, sorted);
+                case "pin": return ChallengeUtilsFiltering.GetFilteredList("pin", Pinnable, sorted);
+                case "tolls": return ChallengeUtilsFiltering.GetFilteredList("tolls", BombableOutposts, sorted);
+                case "food": return ChallengeUtilsFiltering.GetFilteredList("food", FoodTypes, sorted);
+                case "weapons": return ChallengeUtilsFiltering.GetFilteredList("weapons", Weapons, sorted);
+                case "weaponsnojelly": return ChallengeUtilsFiltering.GetFilteredList("weaponsnojelly", GetCorrectListForChallenge("weapons"), sorted);
+                case "theft": return ChallengeUtilsFiltering.GetFilteredList("theft", StealableStolable, sorted);
+                case "friend": return ChallengeUtilsFiltering.GetFilteredList("friend", Befriendable, sorted);
+                case "pearls": return ChallengeUtilsFiltering.GetFilteredList("pearls", CollectablePearls, sorted);
+                case "craft": return ChallengeUtilsFiltering.GetFilteredList("craft", CraftableItems, sorted);
+                case "regions": return ChallengeUtilsFiltering.GetFilteredList("regions", null, sorted);
+                case "regionsreal": return ChallengeUtilsFiltering.GetFilteredList("regionsreal", null, sorted);
+                case "nootregions": return ChallengeUtilsFiltering.GetFilteredList("nootregions", GetCorrectListForChallenge("regions"), sorted);
+                case "popcornregions": return ChallengeUtilsFiltering.GetFilteredList("popcornregions", GetCorrectListForChallenge("regionsreal"), sorted);
+                case "pomegranateregions": return ChallengeUtilsFiltering.GetFilteredList("pomegranateRegions", PomegranateRegions, sorted);
+                case "echoes": return ChallengeUtilsFiltering.GetFilteredList("echoes", null, sorted);
+                //No clean way to get all spots because CheckForRegionGhost doesn't work for spinning top
+                case "spinners": return ChallengeUtilsFiltering.GetFilteredList("spinners", null, sorted);
+                case "weaverrooms": return ChallengeUtilsFiltering.GetFilteredList("weavers", null, sorted);
+                case "creatures": return ChallengeUtilsFiltering.GetFilteredList("creatures", null, sorted);
+                case "depths": return ChallengeUtilsFiltering.GetFilteredList("depths", Depthable, sorted);
+                case "banitem": return ChallengeUtilsFiltering.GetFilteredList("banitem", Bannable, sorted);
+                // this one fucking sucks
+                case "unlocks": return ChallengeUtilsFiltering.GetFilteredList("unlocks", null, sorted);
+                case "chatlogs": return ChallengeUtilsFiltering.GetFilteredList("chatlogs", null, sorted);
+                case "passage": return ChallengeUtilsFiltering.GetFilteredList("passage", null, sorted);
+                case "expobject": return ChallengeUtilsFiltering.GetFilteredList("storable", Storable, sorted);
+                case "vista": return ChallengeUtilsFiltering.GetFilteredList("vista", null, sorted);
             }
             return ["Whoops something went wrong"];
-        }
-
-        public static string[] GetSortedCorrectListForChallenge(string listName)
-        {
-            return GetCorrectListForChallenge(listName).Distinct().ToArray().SortArray();
-        }
-
-        private static string[] SortArray(this string[] array)
-        {
-            List<string> list = array.ToList();
-            list.Sort();
-            return list.ToArray();
         }
 
         public static string ChallengeTools_ItemName(On.Expedition.ChallengeTools.orig_ItemName orig, ItemType type)
@@ -194,6 +146,8 @@ namespace BingoMode.BingoChallenges
             if (type == ItemType.Rock) return translator.Translate("Rocks");
             if (type == ItemType.SporePlant) return translator.Translate("Bee Hives");
             if (type == ItemType.DataPearl) return translator.Translate("Pearls");
+            if (type == ItemType.GraffitiBomb) return translator.Translate("Graffiti Bombs");
+            if (type == WatcherItemType.Boomerang) return translator.Translate("Boomerangs");
             // Food items
             if (type == ItemType.DangleFruit) return translator.Translate("Blue Fruit");
             if (type == ItemType.SSOracleSwarmer) return translator.Translate("Pebbles' Neurons");
@@ -205,6 +159,10 @@ namespace BingoMode.BingoChallenges
             if (type == DLCItemType.DandelionPeach) return translator.Translate("Dandelion Peaches");
             if (type == DLCItemType.LillyPuck) return translator.Translate("Lillypucks");
             if (type == DLCItemType.GooieDuck) return translator.Translate("Gooieducks");
+            if (type == WatcherItemType.FireSpriteLarva) return translator.Translate("Fire Sprite Larvae");
+            // Other
+            if (type == ItemType.KarmaFlower) return translator.Translate("Karma Flowers");
+
 
             return orig.Invoke(type);
         }
@@ -218,6 +176,11 @@ namespace BingoMode.BingoChallenges
             creatureNames[(int)CreatureType.Salamander] = ChallengeTools.IGT.Translate("Salamanders");
             creatureNames[(int)CreatureType.Spider] = ChallengeTools.IGT.Translate("Coalescipedes");
             if (ModManager.MSC) creatureNames[(int)DLCSharedEnums.CreatureTemplateType.Yeek] = ChallengeTools.IGT.Translate("Yeeks");
+            if (ModManager.Watcher) creatureNames[(int)WatcherEnums.CreatureTemplateType.SandGrub] = ChallengeTools.IGT.Translate("Sand Grubs");
+            if (ModManager.Watcher) creatureNames[(int)WatcherEnums.CreatureTemplateType.Tardigrade] = ChallengeTools.IGT.Translate("Tardigrades");
+            if (ModManager.Watcher) creatureNames[(int)WatcherEnums.CreatureTemplateType.Rat] = ChallengeTools.IGT.Translate("Rats");
+            if (ModManager.Watcher) creatureNames[(int)WatcherEnums.CreatureTemplateType.Frog] = ChallengeTools.IGT.Translate("Frogs");
+            if (ModManager.Watcher) creatureNames[(int)WatcherEnums.CreatureTemplateType.Barnacle] = ChallengeTools.IGT.Translate("Barnacles");
         }
 
         public static List<string> CreatureOriginRegions(string type, SlugcatStats.Name slug)
@@ -254,10 +217,10 @@ namespace BingoMode.BingoChallenges
         private static void FetchAllEnterableRegions()
         {
             string path = AssetManager.ResolveFilePath(Path.Combine("world", "regions.txt"));
-            if (File.Exists(path)) 
+            if (File.Exists(path))
             {
                 AllEnterableRegions = File.ReadAllLines(path);
-            } 
+            }
         }
 
         private static void FetchGatesFromFile()
@@ -269,7 +232,7 @@ namespace BingoMode.BingoChallenges
                 string[] lines = File.ReadAllLines(path);
                 foreach (string line in lines)
                 {
-                    try 
+                    try
                     {
                         string actualLine = line;
                         if (line.StartsWith("MSC-"))
@@ -291,10 +254,7 @@ namespace BingoMode.BingoChallenges
             AllGates = gatesToAdd.ToArray();
         }
 
-        public static string[] AllGates = [];
-        public static string[] AllEnterableRegions = [];
-
-        public static readonly string[] Depthable = 
+        public static readonly string[] Depthable =
         {
             "Hazer",
             "VultureGrub",
@@ -312,7 +272,10 @@ namespace BingoMode.BingoChallenges
             "VultureGrub",
             "CicadaA",
             "CicadaB",
-            "Yeek"
+            "Yeek",
+            "Tardigrade",
+            "Frog",
+            "Rat"
         };
 
         public static readonly string[] Pinnable =
@@ -336,72 +299,69 @@ namespace BingoMode.BingoChallenges
 
         public static readonly string[] BombableOutposts =
         {
-            "su_c02",
-            "gw_c05",
-            "gw_c11",
-            "lf_e03",
-            "ug_toll",
+            "SU_C02",
+            "GW_C05",
+            "GW_C11",
+            "LF_E03",
+            "OE_TOWER04",
+            "UG_TOLL",
+            "LC_C10",
+            "LC_STRIPMALLNEW",
+            "LC_TEMPLETOLL",
+            "WARF_G01",
+            "WBLA_F01",
+            "WSKD_B41"
         };
 
         public static string NameForPearl(string pearl)
         {
             switch (pearl)
             {
-                case "SU":
-                    return "Light Blue";
-                case "UW":
-                    return "Pale Green";
-                case "SH":
-                    return "Deep Magenta";
-                case "LF_bottom":
-                    return "Bright Red";
-                case "LF_west":
-                    return "Deep Pink";
-                case "SL_moon":
-                    return "Pale Yellow";
-                case "SL_chimney":
-                    return "Bright Magenta";
-                case "SL_bridge":
-                    return "Bright Purple";
-                case "DS":
-                    return "Bright Green";
-                case "GW":
-                    return "Viridian";
-                case "CC":
-                    return "Gold";
-                case "HI":
-                    return "Bright Blue";
-                case "SB_filtration":
-                    return "Teal";
-                case "SB_ravine":
-                    return "Dark Magenta";
-                case "SI_top":
-                    return "Dark Blue";
-                case "SI_west":
-                    return "Dark Green";
-                case "SI_chat3":
-                    return "Dark Purple";
-                case "SI_chat4":
-                    return "Olive Green";
-                case "SI_chat5":
-                    return "Dark Magenta";
-                case "VS":
-                    return "Deep Purple";
-                case "OE":
-                    return "Light Purple";
-                case "DM":
-                    return "Light Yellow";
-                case "LC":
-                    return "Deep Green";
-                case "LC_second":
-                    return "Bronze";
-                case "SU_filt":
-                    return "Light Pink";
-                case "MS":
-                    return "Dull Yellow";
+                case "SU": return "Light Blue";
+                case "UW": return "Pale Green";
+                case "SH": return "Deep Magenta";
+                case "LF_bottom": return "Bright Red";
+                case "LF_west": return "Deep Pink";
+                case "SL_moon": return "Pale Yellow";
+                case "SL_chimney": return "Bright Magenta";
+                case "SL_bridge": return "Bright Purple";
+                case "DS": return "Bright Green";
+                case "GW": return "Viridian";
+                case "CC": return "Gold";
+                case "HI": return "Bright Blue";
+                case "SB_filtration": return "Teal";
+                case "SB_ravine": return "Dark Magenta";
+                case "SI_top": return "Dark Blue";
+                case "SI_west": return "Dark Green";
+                case "SI_chat3": return "Dark Purple";
+                case "SI_chat4": return "Olive Green";
+                case "SI_chat5": return "Dark Magenta";
+                case "VS": return "Deep Purple";
+                case "OE": return "Light Purple";
+                case "DM": return "Light Yellow";
+                case "LC": return "Deep Green";
+                case "LC_second": return "Bronze";
+                case "SU_filt": return "Light Pink";
+                case "MS": return "Dull Yellow";
+                case "WARG_AUDIO_GROOVE": return "Pink";
+                case "WSKD_AUDIO_JAM2": return "audio";
+                case "WSKC_ABSTRACT": return "Dark Teal";
+                case "WBLA_AUDIO_VOICEWIND1": return "audio";
+                case "WARD_TEXT_STARDUST": return "Bright Viridian";
+                case "WARE_AUDIO_VOICEWIND2": return "audio";
+                case "WARB_TEXT_SECRET": return "Dark Purple";
+                case "WARC_TEXT_CONTEMPT": return "Pale Pink";
+                case "WPTA_DRONE": return "Beige";
+                case "WRFB_AUDIO_JAM4": return "audio";
+                case "WTDA_AUDIO_JAM1": return "audio";
+                case "WTDB_AUDIO_JAM3": return "audio";
+                case "WVWA_TEXT_KITESDAY": return "Amber";
+                case "WMPA_TEXT_NOTIONOFSELF": return "Pale Viridian";
+                case "WORA_WORA": return "Light Green";
+                case "WAUA_WAUA": return "Orange";
+                case "WAUA_TEXT_AUDIO_TALKSHOW": return "Light Magenta";
+                default: return "Erm, pearl colored pearl";
             }
-
-            return "NULL";
         }
 
         public static readonly string[] FoodTypes =
@@ -413,6 +373,7 @@ namespace BingoMode.BingoChallenges
             "JellyFish",
             "Mushroom",
             "SSOracleSwarmer",
+            "FireSpriteLarva",
 
             // MSC
             "GooieDuck",
@@ -420,12 +381,17 @@ namespace BingoMode.BingoChallenges
             "DandelionPeach",
             "GlowWeed",
 
-            // Crits
+            // Crits. Put DLC items after vulturegrub but before small centi so that smallcentipede remains the divider (customizerdialog)
             "VultureGrub",
+            "Rat",
+            "Tardigrade",
+            "SandGrub",
+            "Frog",
+            "Barnacle",
             "Hazer",
             "SmallNeedleWorm",
             "Fly",
-            "SmallCentipede"
+            "SmallCentipede",
         };
 
         public static readonly string[] Weapons =
@@ -436,7 +402,11 @@ namespace BingoMode.BingoChallenges
             "ScavengerBomb",
             "JellyFish",
             "PuffBall",
-            "LillyPuck"
+            "LillyPuck",
+            "WaterNut",
+            "Boomerang",
+            "Frog",
+            "GraffitiBomb"
         };
 
         public static readonly string[] StealableStolable =
@@ -444,9 +414,19 @@ namespace BingoMode.BingoChallenges
             "Spear",
             "Rock",
             "ScavengerBomb",
+            "GraffitiBomb",
+            "Boomerang",
             "Lantern",
             "GooieDuck",
-            "GlowWeed"
+            "GlowWeed",
+            "DataPearl",
+            "FirecrackerPlant",
+            "SporePlant",
+            "FlareBomb",
+            "LillyPuck",
+            "KarmaFlower",
+            "PuffBall",
+            "FlyLure"
         };
 
         public static readonly string[] Bannable =
@@ -458,7 +438,9 @@ namespace BingoMode.BingoChallenges
             "FirecrackerPlant",
             "BubbleGrass",
             "Rock",
-            "DataPearl"
+            "DataPearl",
+            "Boomerang",
+            "GraffitiBomb"
         };
 
         public static readonly string[] Befriendable =
@@ -476,8 +458,14 @@ namespace BingoMode.BingoChallenges
             "EelLizard",
             "SpitLizard",
             "ZoopLizard",
-            "RedLizard"
+            "RedLizard",
+            "PeachLizard",
+            "IndigoLizard",
+            "BlizzardLizard",
+            "BasiliskLizard"
         };
+
+        public static readonly string[] PomegranateRegions = { "WTDB", "WARC", "WVWB", "WPGA", "WRRA", "WTDA", "WVWA" };
 
         public static readonly string[] CollectablePearls =
         {
@@ -506,7 +494,24 @@ namespace BingoMode.BingoChallenges
             "DM",
             "LC_second",
             "SU_filt",
-            "MS"
+            "MS",
+            "WORA_WORA",
+            "WAUA_WAUA",
+            "WPTA_DRONE",
+            "WSKC_ABSTRACT",
+            "WBLA_AUDIO_VOICEWIND1",
+            "WARE_AUDIO_VOICEWIND2",
+            "WTDA_AUDIO_JAM1",
+            "WSKD_AUDIO_JAM2",
+            "WTDB_AUDIO_JAM3",
+            "WRFB_AUDIO_JAM4",
+            "WARG_AUDIO_GROOVE",
+            "WAUA_TEXT_AUDIO_TALKSHOW",
+            "WMPA_TEXT_NOTIONOFSELF",
+            "WARB_TEXT_SECRET",
+            "WARC_TEXT_CONTEMPT",
+            "WARD_TEXT_STARDUST",
+            "WVWA_TEXT_KITESDAY",
         };
 
         public static readonly string[] CraftableItems =
@@ -526,6 +531,7 @@ namespace BingoMode.BingoChallenges
             "GlowWeed",
             "GooieDuck",
             "FireEgg",
+            "KarmaFlower"
         };
 
         public static readonly string[] Storable =
@@ -544,11 +550,98 @@ namespace BingoMode.BingoChallenges
             "SlimeMold",
             "BubbleGrass",
             "EggBugEgg",
+            "KarmaFlower",
 
             // MSC
             "GooieDuck",
             "LillyPuck",
-            "DandelionPeach"
+            "DandelionPeach",
+
+            // watcher
+            "FireSpriteLarva",
+            "GraffitiBomb",
+            "Boomerang",
         };
+
+        public static void PopulateWatcherData()
+        {
+            watcherRegions = SlugcatStats.SlugcatStoryRegions(WatcherEnums.SlugcatStatsName.Watcher).Select(r => r.ToLowerInvariant()).ToList();
+            List<string> rawPortals = new List<string>();
+            List<string> rawSTSpots = new List<string>();
+            List<string> rawDWTSpots = new List<string>();
+
+            foreach (var region in watcherRegions)
+            {
+                if (Custom.rainWorld.regionWarpRooms.ContainsKey(region))
+                {
+                    foreach (var warp in Custom.rainWorld.regionWarpRooms[region])
+                    {
+                        rawPortals.Add(warp);
+                    }
+                }
+                if (Custom.rainWorld.regionSpinningTopRooms.ContainsKey(region))
+                {
+                    foreach (var st in Custom.rainWorld.regionSpinningTopRooms[region])
+                    {
+                        rawSTSpots.Add(st);
+                    }
+                }
+                if (Custom.rainWorld.regionDynamicWarpTargets.ContainsKey(region))
+                {
+                    foreach (var dt in Custom.rainWorld.regionDynamicWarpTargets[region])
+                    {
+                        rawDWTSpots.Add(dt);
+                    }
+                }
+            }
+
+            watcherPortals = new List<string>();
+            foreach (var line in rawPortals)
+            {
+                var parts = line.Split(':');
+                if (parts.Length < 4) continue;
+
+                string origin = parts[0].ToUpperInvariant();
+                string dest = parts[3].ToUpperInvariant();
+
+                var ordered = new[] { origin, dest };
+                string portalKey = $"{ordered[0]}-{ordered[1]}".ToUpperInvariant();
+
+                if (!watcherPortals.Contains(portalKey))
+                {
+                    watcherPortals.Add(portalKey);
+                }
+            }
+
+            watcherSTSpots = new List<string>();
+            foreach (var line in rawSTSpots)
+            {
+                var parts = line.Split(':');
+                if (parts.Length < 3) continue;
+
+                string origin = parts[0].ToUpperInvariant();
+                string dest = parts[2].ToUpperInvariant();
+
+                var ordered = new[] { origin, dest };
+                string STKey = $"{ordered[0]}-{ordered[1]}".ToUpperInvariant();
+
+                if (!watcherSTSpots.Contains(STKey))
+                {
+                    watcherSTSpots.Add(STKey);
+                }
+            }
+
+            watcherDWTSpots = new List<string>();
+            foreach (var line in rawDWTSpots)
+            {
+                var parts = line.Split(':');
+                string DWTKey = parts[0].ToUpperInvariant();
+
+                if (!watcherDWTSpots.Contains(DWTKey))
+                {
+                    watcherDWTSpots.Add(DWTKey);
+                }
+            }
+        }
     }
 }

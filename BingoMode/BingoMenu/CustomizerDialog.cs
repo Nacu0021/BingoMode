@@ -10,6 +10,9 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using System.Linq;
+using System.Text.RegularExpressions;
+using HUD;
+using On.Watcher;
 
 namespace BingoMode.BingoMenu
 {
@@ -309,20 +312,26 @@ namespace BingoMode.BingoMenu
         {
             if (owner.challenge is BingoEatChallenge c)
             {
-                c.isCreature = Array.IndexOf(ChallengeUtils.FoodTypes, c.foodType.Value) >= Array.IndexOf(ChallengeUtils.FoodTypes, "VultureGrub");
+                c.isCreature = Array.IndexOf(ChallengeUtils.GetCorrectListForChallenge("food"), c.foodType.Value) >= Array.IndexOf(ChallengeUtils.GetCorrectListForChallenge("food"), "VultureGrub");
             }
             else if (owner.challenge is BingoDontUseItemChallenge cc)
             {
-                var l = ChallengeUtils.GetCorrectListForChallenge("banitem");
-                cc.isFood = Array.IndexOf(l, cc.item.Value) < (l.Length - ChallengeUtils.Bannable.Length);
-                if (cc.isFood) cc.isCreature = Array.IndexOf(ChallengeUtils.FoodTypes, cc.item.Value) >= Array.IndexOf(ChallengeUtils.FoodTypes, "VultureGrub");
+                var bans = ChallengeUtils.GetCorrectListForChallenge("banitem");
+                var foods = ChallengeUtils.GetCorrectListForChallenge("food");
+
+                cc.isFood = Array.IndexOf(bans, cc.item.Value) <= Array.IndexOf(bans, "SmallCentipede");
+                if (cc.isFood) cc.isCreature = Array.IndexOf(foods, cc.item.Value) >= Array.IndexOf(foods, "VultureGrub");
             }
             else if (owner.challenge is BingoVistaChallenge ccc)
             {
-                ccc.region = ccc.room.Value.Substring(0, 2);
+                ccc.region = ccc.room.Value.Substring(0, ExpeditionData.slugcatPlayer == Watcher.WatcherEnums.SlugcatStatsName.Watcher ? 4 : 2);
                 
                 ccc.location = ChallengeUtils.BingoVistaLocations[ccc.region][ccc.room.Value];
                 BingoVistaChallenge.ModifyVistaPositions(ccc);
+            }
+            else if (owner.challenge is WatcherBingoWeaverChallenge cccc)
+            {
+                cccc.region = Regex.Split(cccc.room.Value, "_")[0];
             }
             owner.challenge.UpdateDescription();
             owner.UpdateText();
@@ -339,17 +348,21 @@ namespace BingoMode.BingoMenu
                     closing = true;
                     targetAlpha = 0f;
                     SteamTest.UpdateOnlineBingo();
+                    owner.menu.PlaySound(SoundID.MENU_Button_Standard_Button_Pressed);
                     break;
                 case "RANDOMIZE_VARIABLE":
                     AssignChallenge(onSettings ? owner.challenge : null);
+                    owner.menu.PlaySound(SoundID.MENU_Next_Slugcat);
                     break;
                 case "CHALLENGE_SETTINGS":
                     onSettings = true;
                     sliderF = 1f;
+                    owner.menu.PlaySound(SoundID.MENU_Button_Standard_Button_Pressed);
                     break;
                 case "CHALLENGE_TYPES":
                     onSettings = false;
                     sliderF = 1f;
+                    owner.menu.PlaySound(SoundID.MENU_Button_Standard_Button_Pressed);
                     break;
             }
 
@@ -358,6 +371,7 @@ namespace BingoMode.BingoMenu
                 ChallengeSetting s = challengeSettings[int.Parse(message.Split(';')[1])];
                 ListItem[] list = (s.field as OpComboBox)._itemList;
                 (s.field as OpComboBox).value = list[UnityEngine.Random.Range(0, list.Length)].name;
+                owner.menu.PlaySound(SoundID.MENU_Next_Slugcat);
             }
         }
 
@@ -477,7 +491,7 @@ namespace BingoMode.BingoMenu
                 {
                     this.value = s;
                     conf = MenuModList.ModButton.RainWorldDummy.config.Bind<string>("_ChallengeSetting", s.Value, (ConfigAcceptableBase)null);
-                    field = new OpComboBox(conf as Configurable<string>, pos, 140f, s.listName != null ? ChallengeUtils.GetSortedCorrectListForChallenge(s.listName) : ["Whoops errore"]);
+                    field = new OpComboBox(conf as Configurable<string>, pos, 140f, s.listName != null ? ChallengeUtils.GetCorrectListForChallenge(s.listName, true) : ["Whoops errore"]);
                     field.OnValueUpdate += UpdootString;
                     (field as OpComboBox).OnListOpen += FocusThing;
                     (field as OpComboBox).OnListClose += UnfocusThing;

@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
+using Watcher;
 
 namespace BingoMode.BingoChallenges
 {
@@ -48,13 +49,13 @@ namespace BingoMode.BingoChallenges
 
         public override void UpdateDescription()
         {
-            this.description = ChallengeTools.IGT.Translate("Enter " + Region.GetRegionFullName(region.Value, ExpeditionData.slugcatPlayer));
+            this.description = ChallengeTools.IGT.Translate("Enter <region>").Replace("<region>", ChallengeTools.IGT.Translate(Region.GetRegionFullName(region.Value, ExpeditionData.slugcatPlayer)));
             base.UpdateDescription();
         }
 
         public override Phrase ConstructPhrase()
         {
-            return new Phrase([[new Icon("keyShiftA", 1f, Color.green, 90), new Verse(region.Value)]]);
+            return new Phrase([[new Icon(Plugin.PluginInstance.BingoConfig.FillIcons.Value ? "keyShiftB" : "keyShiftA", 1f, Color.green, 90), new Verse(region.Value)]]);
         }
 
         public override bool Duplicable(Challenge challenge)
@@ -70,7 +71,7 @@ namespace BingoMode.BingoChallenges
 
         public override Challenge Generate()
         {
-            string[] regiones = ChallengeUtils.GetSortedCorrectListForChallenge("regionsreal");
+            string[] regiones = ChallengeUtils.GetCorrectListForChallenge("regionsreal", true);
 
             BingoEnterRegionChallenge ch = new BingoEnterRegionChallenge
             {

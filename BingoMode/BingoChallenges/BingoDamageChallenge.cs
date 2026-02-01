@@ -2,6 +2,7 @@
 using BingoMode.BingoSteamworks;
 using Expedition;
 using Menu.Remix;
+using On.Watcher;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -63,6 +64,7 @@ namespace BingoMode.BingoChallenges
         public SettingBox<int> amount;
         public SettingBox<bool> inOneCycle;
         public SettingBox<string> region;
+        public List<string> frogsThrown;
         public int current;
 
         public BingoDamageChallenge()
@@ -72,6 +74,7 @@ namespace BingoMode.BingoChallenges
             amount = new(0, "Amount", 2);
             inOneCycle = new(false, "In One Cycle", 3);
             region = new("", "Region", 4, listName: "regions");
+            frogsThrown = [];
         }
 
         public override void UpdateDescription()
@@ -81,7 +84,7 @@ namespace BingoMode.BingoChallenges
                 ChallengeTools.CreatureName(ref ChallengeTools.creatureNames);
             }
             string location = region.Value != "Any Region" ? ChallengeTools.IGT.Translate(Region.GetRegionFullName(region.Value, ExpeditionData.slugcatPlayer)) : "";
-            this.description = ChallengeTools.IGT.Translate("Hit <crit> with <weapon> [<current>/<amount>] times<location>" + (inOneCycle.Value ? " in one cycle" : ""))
+            this.description = ChallengeTools.IGT.Translate("Hit <crit> with <weapon> [<current>/<amount>] times<location>" + ChallengeTools.IGT.Translate(inOneCycle.Value ? " in one cycle" : ""))
                 .Replace("<crit>", victim.Value == "Any Creature" ? ChallengeTools.IGT.Translate("creatures") : ChallengeTools.creatureNames[new CreatureType(victim.Value, false).Index])
                 .Replace("<location>", location != "" ? ChallengeTools.IGT.Translate(" in ") + location : "")
                 .Replace("<weapon>", ChallengeTools.ItemName(new(weapon.Value)))
@@ -122,13 +125,15 @@ namespace BingoMode.BingoChallenges
         {
             List<ChallengeTools.ExpeditionCreature> randoe = ChallengeTools.creatureSpawns[ExpeditionData.slugcatPlayer.value];
             bool oneCycle = UnityEngine.Random.value < 0.33f;
-            string wep = ChallengeUtils.Weapons[UnityEngine.Random.Range(1, ChallengeUtils.Weapons.Length - (ModManager.MSC ? 0 : 1))];
+
+            // watcher touches this
+            string wep = ChallengeUtils.GetCorrectListForChallenge("weapons")[UnityEngine.Random.Range(1, ChallengeUtils.GetCorrectListForChallenge("weapons").Length)];
 
             string crit;
             if (UnityEngine.Random.value < 0.25f)
             {
                 crit = "Any Creature";
-                if (wep == "Any Weapon") wep = ChallengeUtils.Weapons[UnityEngine.Random.Range(1, ChallengeUtils.Weapons.Length - (ModManager.MSC ? 0 : 1))];
+                if (wep == "Any Weapon") wep = ChallengeUtils.GetCorrectListForChallenge("weapons")[UnityEngine.Random.Range(1, ChallengeUtils.GetCorrectListForChallenge("weapons").Length)];
             }
             else crit = randoe[UnityEngine.Random.Range(0, randoe.Count)].creature.value;
             int amound = UnityEngine.Random.Range(2, 7);
@@ -140,6 +145,7 @@ namespace BingoMode.BingoChallenges
                 amount = new(amound, "Amount", 2),
                 inOneCycle = new(oneCycle, "In One Cycle", 3),
                 region = new("Any Region", "Region", 5, listName: "regions"),
+                frogsThrown = []
             };
         }
 
@@ -160,15 +166,16 @@ namespace BingoMode.BingoChallenges
             else return true;
         }
 
-        public void Hit(AbstractPhysicalObject.AbstractObjectType weaponn, Creature victimm)
+        public void Hit(string weaponn, Creature victimm)
         {
-            if (completed || revealed || TeamsCompleted[SteamTest.team] || hidden || !CritInLocation(victimm) || (victim.Value == "Any Creature" && victimm.Template.smallCreature)) return;
+            // watcher touches this
+            if (completed || revealed || TeamsCompleted[SteamTest.team] || hidden || !CritInLocation(victimm) || (victim.Value == "Any Creature" && (victimm.Template.smallCreature && !(ModManager.Watcher && victimm.Template.type == Watcher.WatcherEnums.CreatureTemplateType.FireSprite)))) return;
 
             bool glug = false;
             bool weaponCheck = false;
             if (victimm.Template.type.value.ToLowerInvariant() == victim.Value.ToLowerInvariant()) glug = true;
             if (victim.Value == "Any Creature" && victimm is not Player) glug = true;
-            if (weaponn.value.ToLowerInvariant() == weapon.Value.ToLowerInvariant()) weaponCheck = true;
+            if (weaponn.ToLowerInvariant() == weapon.Value.ToLowerInvariant()) weaponCheck = true;
             if (weapon.Value == "Any Weapon") weaponCheck = true;
 
             if (weaponCheck && glug)
@@ -184,7 +191,7 @@ namespace BingoMode.BingoChallenges
         {
             base.Update();
             if (revealed || completed) return;
-            if (this.game.cameras[0].room.shelterDoor != null && this.game.cameras[0].room.shelterDoor.IsClosing)
+            if (this.game?.cameras[0]?.room?.shelterDoor != null && this.game.cameras[0].room.shelterDoor.IsClosing)
             {
                 if (this.current != 0 && this.inOneCycle.Value)
                 {
@@ -240,42 +247,14 @@ namespace BingoMode.BingoChallenges
             try
             {
                 string[] array = Regex.Split(args, "><");
-                // 1.2
-                if (array.Length == 8)
-                {
-                    weapon = SettingBoxFromString(array[0]) as SettingBox<string>;
-                    victim = SettingBoxFromString(array[1]) as SettingBox<string>;
-                    amount = SettingBoxFromString(array[3]) as SettingBox<int>;
-                    inOneCycle = SettingBoxFromString(array[4]) as SettingBox<bool>;
-                    region = SettingBoxFromString(array[5]) as SettingBox<string>;
-                    completed = (array[6] == "1");
-                    revealed = (array[7] == "1");
-                    current = (inOneCycle.Value && !completed) ? 0 : int.Parse(array[2], NumberStyles.Any, CultureInfo.InvariantCulture);
-                }
-                // 1.1
-                else if (array.Length == 9)
-                {
-                    weapon = SettingBoxFromString(array[0]) as SettingBox<string>;
-                    victim = SettingBoxFromString(array[1]) as SettingBox<string>;
-                    amount = SettingBoxFromString(array[3]) as SettingBox<int>;
-                    inOneCycle = SettingBoxFromString(array[4]) as SettingBox<bool>;
-                    region = SettingBoxFromString(array[5]) as SettingBox<string>;
-                    completed = (array[7] == "1");
-                    revealed = (array[8] == "1");
-                    current = (inOneCycle.Value && !completed) ? 0 : int.Parse(array[2], NumberStyles.Any, CultureInfo.InvariantCulture);
-                }
-                // Pre 1.1
-                else if (array.Length == 6)
-                {
-                    weapon = SettingBoxFromString(array[0]) as SettingBox<string>;
-                    victim = SettingBoxFromString(array[1]) as SettingBox<string>;
-                    current = int.Parse(array[2], NumberStyles.Any, CultureInfo.InvariantCulture);
-                    amount = SettingBoxFromString(array[3]) as SettingBox<int>;
-                    completed = (array[4] == "1");
-                    revealed = (array[5] == "1");
-                    inOneCycle = SettingBoxFromString("System.Boolean|false|In One Cycle|3|NULL") as SettingBox<bool>;
-                    region = SettingBoxFromString("System.String|Any Region|Region|5|regions") as SettingBox<string>;
-                }
+                weapon = SettingBoxFromString(array[0]) as SettingBox<string>;
+                victim = SettingBoxFromString(array[1]) as SettingBox<string>;
+                amount = SettingBoxFromString(array[3]) as SettingBox<int>;
+                inOneCycle = SettingBoxFromString(array[4]) as SettingBox<bool>;
+                region = SettingBoxFromString(array[5]) as SettingBox<string>;
+                completed = (array[6] == "1");
+                revealed = (array[7] == "1");
+                current = (inOneCycle.Value && !completed) ? 0 : int.Parse(array[2], NumberStyles.Any, CultureInfo.InvariantCulture);
                 UpdateDescription();
             }
             catch (Exception ex)
@@ -289,16 +268,24 @@ namespace BingoMode.BingoChallenges
         {
             base.Reset();
             current = 0;
+            frogsThrown?.Clear();
+            frogsThrown = [];
         }
 
         public override void AddHooks()
         {
+            On.Watcher.Frog.Thrown += Frog_Thrown;
+            On.Watcher.Frog.Jump += Frog_Jump;
+            On.Watcher.Frog.Attach += Frog_Attach;
         }
 
         public override void RemoveHooks()
         {
+            On.Watcher.Frog.Thrown -= Frog_Thrown;
+            On.Watcher.Frog.Jump -= Frog_Jump;
+            On.Watcher.Frog.Attach -= Frog_Attach;
         }
 
-        public override List<object> Settings() => [weapon, victim, amount, inOneCycle, region];
+        public override List<object> Settings() => [weapon, amount, region, victim, inOneCycle];
     }
 }

@@ -70,7 +70,7 @@ namespace BingoMode.BingoChallenges
             foreach (Word word in WordsFlat)
             {
                 if (word.background != null) container.AddChild(word.background);
-                container.AddChild(word.display);
+                if (word.display != null) container.AddChild(word.display);
             }
         }
 
@@ -79,16 +79,16 @@ namespace BingoMode.BingoChallenges
             foreach (Word word in WordsFlat)
             {
                 word.background?.RemoveFromContainer();
-                word.display.RemoveFromContainer();
+                word.display?.RemoveFromContainer();
             }
         }
 
         public void SetAlpha(float alpha)
         {
-            foreach (Word word in WordsFlat)
+            foreach (Word word in WordsFlat) 
             {
                 if (word.background != null) word.background.alpha = alpha;
-                word.display.alpha = alpha;
+                if (word.display != null) word.display.alpha = alpha;
             }
         }
 
@@ -132,6 +132,7 @@ namespace BingoMode.BingoChallenges
         public static Icon PEARL_HOARD_COLOR => new("pearlhoard_color", 1f, new Color(0.7f, 0.7f, 0.7f));
         public static Icon PEARL_HOARD_NORMAL => new("pearlhoard_normal", 1f, new Color(0.7f, 0.7f, 0.7f));
         public static Icon DATA_PEARL => new("Symbol_Pearl", 1f, new Color(0.7f, 0.7f, 0.7f));
+        public static Icon KARMA_FLOWER => new("karmaflower", 1f, RainWorld.SaturatedGold);
 
         public Icon(string element, float scale = 1f, Color? color = null, float rotation = 0f) : base()
         {
