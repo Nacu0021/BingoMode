@@ -1,3 +1,6 @@
+# Hi this video game mod repository is now archived, here is the based new one by shrub from youtube (shoutouts):
+https://github.com/shrubfromtomorrow/RainWorldBingo
+
 # Rain World Bingo
 For the mod description/how it works, see https://steamcommunity.com/sharedfiles/filedetails/?id=3441764924
 To find the original repo for Bingo by Nacu (last updated 2.0), see https://github.com/Nacu0021/BingoMode
